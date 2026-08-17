@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shri Jeevani Admin Panel</title>
+
+<style>
+
+    :root{
+        --maroon:#7a1f2b;
+        --maroon-dark:#5c1620;
+        --gold:#c9a13b;
+        --gold-light:#f3e4bb;
+        --cream:#fdf8ef;
+        --text:#3a2a1d;
+    }
+
+    *{
+        box-sizing:border-box;
+    }
+
+    body{
+        font-family:'Segoe UI', Arial, sans-serif;
+        margin:0;
+        min-height:100vh;
+        background:linear-gradient(135deg,var(--cream),#f1e3c6);
+        color:var(--text);
+        display:flex;
+        align-items:flex-start;
+        justify-content:center;
+        padding:40px 20px;
+    }
+
+    .hidden{
+        display:none !important;
+    }
+
+    .container{
+        width:100%;
+        max-width:760px;
+        background:#fff;
+        border-radius:16px;
+        box-shadow:0 12px 40px rgba(122,31,43,0.18);
+        overflow:hidden;
+        border:1px solid var(--gold-light);
+    }
+
+    .panel-header{
+        background:linear-gradient(120deg,var(--maroon),var(--maroon-dark));
+        padding:28px 30px;
+        text-align:center;
+        position:relative;
+    }
+
+    .back-link{
+        position:absolute;
+        top:16px;
+        left:18px;
+        color:var(--gold-light);
+        font-size:13px;
+        text-decoration:none;
+        display:flex;
+        align-items:center;
+        gap:6px;
+        opacity:0.85;
+        transition:opacity .2s;
+        letter-spacing:0.5px;
+    }
+
+    .back-link:hover{
+        opacity:1;
+    }
+
+    .panel-header h1{
+        margin:0;
+        color:var(--gold-light);
+        font-size:26px;
+        letter-spacing:1px;
+    }
+
+    .panel-header span{
+        color:#e8c98f;
+        font-size:13px;
+        letter-spacing:2px;
+        text-transform:uppercase;
+    }
+
+    .panel-body{
+        padding:30px 34px 36px;
+    }
+
+    label{
+        font-size:13px;
+        font-weight:600;
+        color:var(--maroon-dark);
+        margin-bottom:-8px;
+    }
+
+    input,textarea,select{
+        width:100%;
+        padding:12px 14px;
+        border:1px solid #ddd0b3;
+        border-radius:8px;
+        font-size:15px;
+        background:#fffdf8;
+        transition:border-color .2s, box-shadow .2s;
+    }
+
+    input:focus,textarea:focus,select:focus{
+        outline:none;
+        border-color:var(--gold);
+        box-shadow:0 0 0 3px rgba(201,161,59,0.2);
+    }
+
+    textarea{
+        min-height:90px;
+        resize:vertical;
+    }
+
+    button{
+        width:100%;
+        padding:13px;
+        background:var(--maroon);
+        color:#fff;
+        border:none;
+        border-radius:8px;
+        cursor:pointer;
+        font-size:15px;
+        font-weight:600;
+        letter-spacing:0.5px;
+        transition:background .2s, transform .1s;
+        margin-top:6px;
+    }
+
+    button:hover{
+        background:var(--maroon-dark);
+    }
+
+    button:active{
+        transform:scale(0.99);
+    }
+
+    .error-msg{
+        color:#b00020;
+        font-size:13px;
+        text-align:center;
+        min-height:18px;
+    }
+
+    /* ADMIN PANEL */
+
+    .section-title{
+        color:var(--maroon-dark);
+        font-size:18px;
+        margin:30px 0 14px;
+        border-bottom:2px solid var(--gold-light);
+        padding-bottom:8px;
+    }
+
+    .form-grid{
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:14px;
+    }
+
+    .form-grid .full{
+        grid-column:1 / -1;
+    }
+
+    .image-preview{
+        width:100%;
+        max-height:160px;
+        object-fit:contain;
+        border:1px dashed var(--gold);
+        border-radius:8px;
+        padding:6px;
+        margin-top:6px;
+        display:none;
+        background:#fffdf8;
+    }
+
+    .toolbar{
+        display:flex;
+        justify-content:space-between;
+        align-items:center;
+        margin-top:24px;
+        gap:10px;
+    }
+
+    .toolbar button.secondary{
+        background:transparent;
+        color:var(--maroon);
+        border:1px solid var(--maroon);
+        width:auto;
+        padding:8px 16px;
+        font-size:13px;
+    }
+
+    .toolbar button.secondary:hover{
+        background:var(--maroon);
+        color:#fff;
+    }
+
+    .empty-state{
+        text-align:center;
+        color:#a89a82;
+        padding:30px 0;
+        font-style:italic;
+    }
+
+    .product-list{
+        display:grid;
+        grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
+        gap:18px;
+        margin-top:16px;
+    }
+
+    .product{
+        border:1px solid var(--gold-light);
+        border-radius:12px;
+        background:#fffdf8;
+        overflow:hidden;
+        box-shadow:0 3px 10px rgba(0,0,0,0.06);
+        display:flex;
+        flex-direction:column;
+    }
+
+    .product img{
+        width:100%;
+        height:180px;
+        object-fit:cover;
+    }
+
+    .product .info{
+        padding:14px;
+        flex:1;
+        display:flex;
+        flex-direction:column;
+        gap:4px;
+    }
+
+    .product h3{
+        margin:0 0 2px;
+        font-size:15px;
+        color:var(--maroon-dark);
+    }
+
+    .product .price{
+        color:var(--maroon);
+        font-weight:700;
+        font-size:15px;
+    }
+
+    .product .category{
+        display:inline-block;
+        background:var(--gold-light);
+        color:var(--maroon-dark);
+        font-size:11px;
+        padding:2px 8px;
+        border-radius:20px;
+        width:fit-content;
+    }
+
+    .product .desc{
+        font-size:13px;
+        color:#6b5b46;
+        flex:1;
+    }
+
+    .product .delete-btn{
+        margin:0;
+        border-radius:0;
+        background:#b00020;
+        font-size:13px;
+        padding:9px;
+    }
+
+    .product .delete-btn:hover{
+        background:#8a0017;
+    }
+
+    /* LOGIN */
+    #loginSection .panel-body{
+        display:flex;
+        flex-direction:column;
+        gap:14px;
+        max-width:360px;
+        margin:0 auto;
+    }
+
+    .login-icon{
+        font-size:40px;
+        text-align:center;
+        display:block;
+        margin-bottom:4px;
+        color:var(--gold-light);
+    }
+
+</style>
+
+</head>
+<body>
+
+<div id="appWrapper">
+
+    <!-- LOGIN SECTION -->
+    <div id="loginSection" class="container">
+        <div class="panel-header">
+            <a href="saree.html" class="back-link">&#8592; Main Site</a>
+            <span class="login-icon">&#128274;</span>
+            <h1>Shri Jeevani</h1>
+            <span>Admin Login</span>
+        </div>
+        <div class="panel-body">
+            <label for="username">Username</label>
+            <input type="text" id="username" placeholder="Enter username" autocomplete="off">
+
+            <label for="password">Password</label>
+            <input type="password" id="password" placeholder="Enter password" autocomplete="off">
+
+            <div class="error-msg" id="loginError"></div>
+
+            <button onclick="login()">Login</button>
+        </div>
+    </div>
+
+    <!-- ADMIN PANEL (hidden until correct login) -->
+    <div id="adminPanel" class="container hidden">
+        <div class="panel-header">
+            <a href="saree.html" class="back-link">&#8592; Main Site (F9)</a>
+            <h1>Shri Jeevani</h1>
+            <span>Admin Panel</span>
+        </div>
+        <div class="panel-body">
+
+            <div class="form-grid">
+
+                <div class="full">
+                    <label for="name">Product Name</label>
+                    <input type="text" id="name" placeholder="e.g. Banarasi Silk Saree">
+                </div>
+
+                <div>
+                    <label for="price">Price (₹)</label>
+                    <input type="number" id="price" placeholder="e.g. 4999" min="0">
+                </div>
+
+                <div>
+                    <label for="category">Category</label>
+                    <select id="category">
+                        <option>Bridal</option>
+                        <option>Festive</option>
+                        <option>Classic</option>
+                        <option>Contemporary</option>
+                        <option>Suit</option>
+                    </select>
+                </div>
+
+                <div class="full">
+                    <label for="description">Description</label>
+                    <textarea id="description" placeholder="Product description"></textarea>
+                </div>
+
+                <div class="full">
+                    <label for="image">Product Image</label>
+                    <input type="file" id="image" accept="image/*" onchange="previewImage()">
+                    <img id="imagePreview" class="image-preview">
+                </div>
+
+            </div>
+
+            <div class="error-msg" id="formError"></div>
+
+            <button onclick="addProduct()">Add Product</button>
+
+            <div class="toolbar">
+                <h2 class="section-title" style="margin:0;border:none;padding:0;">Added Products</h2>
+                <div style="display:flex;gap:8px;">
+                    <button class="secondary" onclick="window.location.href='saree.html'">&#8592; View Site (F9)</button>
+                    <button class="secondary" onclick="logout()">Logout</button>
+                </div>
+            </div>
+
+            <div id="productList"></div>
+
+        </div>
+    </div>
+
+</div>
+
+<script>
+
+    // ─────────────────────────────────────────────────────────────────
+    // CHANGE (Phase 1 backend integration): admin login and product
+    // management now talk to the Flask API (/api/admin/...) backed by
+    // SQLite, with a hashed password and a real server-side session,
+    // instead of a hardcoded plaintext password and localStorage.
+    // All markup/CSS/IDs are unchanged.
+    // ─────────────────────────────────────────────────────────────────
+
+    let currentProducts = []; // cache of admin product list for delete-by-id lookups
+
+    async function apiFetch(url, options = {}){
+        const res = await fetch(url, {
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            ...options,
+        });
+        let data = null;
+        try { data = await res.json(); } catch(e) { /* no JSON body */ }
+        if(!res.ok){
+            const message = (data && data.error) ? data.error : `Request failed (${res.status})`;
+            throw new Error(message);
+        }
+        return data;
+    }
+
+    // ---------- F9 SHORTCUT: redirect back to main site ----------
+    document.addEventListener("keydown", function(e){
+        if(e.key === "F9"){
+            e.preventDefault();
+            window.location.href = "saree.html";
+        }
+    });
+
+    // ---------- LOGIN ----------
+
+    async function login(){
+
+        let username = document.getElementById("username").value.trim();
+        let password = document.getElementById("password").value;
+        let errorBox = document.getElementById("loginError");
+
+        errorBox.textContent = "";
+
+        if(!username || !password){
+            errorBox.textContent = "Please enter both username and password.";
+            return;
+        }
+
+        try {
+            await apiFetch('/api/admin/login', {
+                method: 'POST',
+                body: JSON.stringify({ username, password })
+            });
+            showAdminPanel();
+        } catch(err){
+            errorBox.textContent = err.message || "Incorrect username or password.";
+        }
+
+    }
+
+    function showAdminPanel(){
+        document.getElementById("loginSection").classList.add("hidden");
+        document.getElementById("adminPanel").classList.remove("hidden");
+        document.getElementById("username").value = "";
+        document.getElementById("password").value = "";
+        displayProducts();
+    }
+
+    async function logout(){
+        try { await apiFetch('/api/admin/logout', { method: 'POST' }); } catch(e) { /* ignore */ }
+        document.getElementById("adminPanel").classList.add("hidden");
+        document.getElementById("loginSection").classList.remove("hidden");
+    }
+
+    // Allow pressing Enter in the password field to submit
+    document.addEventListener("DOMContentLoaded", async function(){
+        document.getElementById("password").addEventListener("keydown", function(e){
+            if(e.key === "Enter") login();
+        });
+
+        // If there's already a valid server-side admin session, skip the login form
+        try {
+            const sessionInfo = await apiFetch('/api/admin/session');
+            if(sessionInfo.loggedIn){
+                showAdminPanel();
+            }
+        } catch(e) { /* not logged in — stay on login form */ }
+    });
+
+    // ---------- IMAGE PREVIEW ----------
+
+    function previewImage(){
+
+        let imageInput = document.getElementById("image");
+        let preview = document.getElementById("imagePreview");
+
+        if(imageInput.files.length === 0){
+            preview.style.display = "none";
+            return;
+        }
+
+        let reader = new FileReader();
+
+        reader.onload = function(){
+            preview.src = reader.result;
+            preview.style.display = "block";
+        };
+
+        reader.readAsDataURL(imageInput.files[0]);
+
+    }
+
+    // ---------- ADD PRODUCT ----------
+
+    function addProduct(){
+
+        let name = document.getElementById("name").value.trim();
+        let price = document.getElementById("price").value;
+        let category = document.getElementById("category").value;
+        let description = document.getElementById("description").value.trim();
+        let imageInput = document.getElementById("image");
+        let errorBox = document.getElementById("formError");
+
+        errorBox.textContent = "";
+
+        if(!name){
+            errorBox.textContent = "Please enter a product name.";
+            return;
+        }
+
+        if(price === "" || isNaN(price) || Number(price) < 0){
+            errorBox.textContent = "Please enter a valid price.";
+            return;
+        }
+
+        if(imageInput.files.length === 0){
+            errorBox.textContent = "Please upload an image.";
+            return;
+        }
+
+        if(imageInput.files[0].size > 5 * 1024 * 1024){
+            errorBox.textContent = "Image is too large. Please choose a file under 5 MB.";
+            return;
+        }
+
+        let reader = new FileReader();
+
+        reader.onload = async function(){
+
+            const categoryLower = category.toLowerCase();
+            // The product API validates against bridal/festive/classic/contemporary.
+            // "Suit" (a legacy option in this form) maps to "classic" so the save
+            // never silently fails for that one dropdown option.
+            const apiCategory = ['bridal','festive','classic','contemporary'].includes(categoryLower)
+                ? categoryLower
+                : 'classic';
+
+            try {
+                await apiFetch('/api/admin/products', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        name: name,
+                        price: Number(price),
+                        category: apiCategory,
+                        description: description,
+                        imageData: reader.result
+                    })
+                });
+            } catch(err){
+                errorBox.textContent = err.message || "Failed to add product.";
+                return;
+            }
+
+            await displayProducts();
+            resetForm();
+
+            // Ask if they want to go back to the main site
+            if(confirm("Product added successfully! ✅\n\nGo back to the main site to see it in the collection?")){
+                window.location.href = "saree.html#collections";
+            }
+
+        };
+
+        reader.readAsDataURL(imageInput.files[0]);
+
+    }
+
+    function resetForm(){
+        document.getElementById("name").value = "";
+        document.getElementById("price").value = "";
+        document.getElementById("category").selectedIndex = 0;
+        document.getElementById("description").value = "";
+        document.getElementById("image").value = "";
+        document.getElementById("imagePreview").style.display = "none";
+    }
+
+    // ---------- DELETE PRODUCT ----------
+
+    async function deleteProduct(productId){
+
+        if(!confirm("Delete this product?")) return;
+
+        try {
+            await apiFetch(`/api/admin/products/${productId}`, { method: 'DELETE' });
+        } catch(err){
+            alert("Failed to delete product: " + err.message);
+            return;
+        }
+
+        await displayProducts();
+
+    }
+
+    // ---------- DISPLAY PRODUCTS ----------
+
+    function escapeHtml(str){
+        return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+    }
+
+    async function displayProducts(){
+
+        let listEl = document.getElementById("productList");
+
+        try {
+            currentProducts = await apiFetch('/api/admin/products');
+        } catch(err){
+            listEl.innerHTML = `<p class="empty-state">Failed to load products: ${escapeHtml(err.message)}</p>`;
+            return;
+        }
+
+        if(currentProducts.length === 0){
+            listEl.innerHTML = '<p class="empty-state">No products added yet.</p>';
+            return;
+        }
+
+        let html = '<div class="product-list">';
+
+        currentProducts.forEach((product) => {
+
+            const imgSrc = product.imageData || '';
+            const imgTag = imgSrc
+                ? `<img src="${imgSrc}" alt="${escapeHtml(product.name)}">`
+                : `<div style="width:100%;height:180px;display:flex;align-items:center;justify-content:center;font-size:3rem;background:var(--gold-light);">${product.emoji || '🌸'}</div>`;
+
+            html += `
+            <div class="product">
+                ${imgTag}
+                <div class="info">
+                    <span class="category">${escapeHtml(product.category)}</span>
+                    <h3>${escapeHtml(product.name)}</h3>
+                    <div class="price">₹${Number(product.price).toLocaleString('en-IN')}</div>
+                    <div class="desc">${escapeHtml(product.description)}</div>
+                </div>
+                <button class="delete-btn" onclick="deleteProduct(${product.id})">Delete</button>
+            </div>
+            `;
+
+        });
+
+        html += '</div>';
+
+        listEl.innerHTML = html;
+
+    }
+
+</script>
+
+</body>
+</html>
