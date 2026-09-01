@@ -44,12 +44,14 @@ def init_mail(app):
     app.config.setdefault("MAIL_PORT", int(os.environ.get("MAIL_PORT", "587")))
     app.config.setdefault("MAIL_USE_TLS", os.environ.get("MAIL_USE_TLS", "true").lower() == "true")
     app.config.setdefault("MAIL_USE_SSL", os.environ.get("MAIL_USE_SSL", "false").lower() == "true")
-    app.config.setdefault("MAIL_USERNAME", os.environ.get("MAIL_USERNAME", ""))
+    username = os.environ.get("MAIL_USERNAME", "")
+    app.config.setdefault("MAIL_USERNAME", username)
     app.config.setdefault("MAIL_PASSWORD", os.environ.get("MAIL_PASSWORD", ""))
-    app.config.setdefault(
+    default_sender = os.environ.get(
         "MAIL_DEFAULT_SENDER",
-        os.environ.get("MAIL_DEFAULT_SENDER", f"{STORE_NAME} <no-reply@shrijeevanisarees.example>"),
+        f"{STORE_NAME} <{username}>" if username else f"{STORE_NAME} <no-reply@shrijeevanisarees.example>",
     )
+    app.config.setdefault("MAIL_DEFAULT_SENDER", default_sender)
     # Used to build absolute links (password reset) inside emails, since a
     # background thread has no request context to infer the host from.
     app.config.setdefault("SITE_URL", os.environ.get("SITE_URL", "http://localhost:5000"))
@@ -70,7 +72,7 @@ def init_mail(app):
         os.environ.get("ADMIN_NOTIFY_EMAIL", app.config.get("MAIL_USERNAME", "")),
     )
     mail.init_app(app)
-    if not MAIL_ENABLED:
+    if not (app.config.get("MAIL_SERVER") or os.environ.get("MAIL_SERVER")):
         logger.warning(
             "MAIL_SERVER is not set — emails will be logged to the console instead of sent. "
             "See README.md for SMTP setup."
@@ -81,22 +83,58 @@ def _send_async(app, msg):
     with app.app_context():
         try:
             mail.send(msg)
+            logger.info("Sent email to %s (async)", msg.recipients)
         except Exception as exc:  # noqa: BLE001 — never let email failure surface to the customer
             logger.error("Failed to send email to %s: %s", msg.recipients, exc)
 
 
 def _dispatch(subject, to, html_body, text_body):
-    """Send in the background if SMTP is configured; otherwise log."""
+    """Send synchronously on Vercel / serverless (or when synchronous mode is needed),
+    or in the background on persistent servers."""
     if not to:
         return
-    if not MAIL_ENABLED:
-        logger.info("[mail disabled] Would send %r to %s", subject, to)
+
+    try:
+        app = current_app._get_current_object()
+    except Exception:
+        app = None
+
+    mail_server = app.config.get("MAIL_SERVER") if app else os.environ.get("MAIL_SERVER", "")
+    if not mail_server:
+        logger.warning("[mail disabled] MAIL_SERVER not configured. Would send %r to %s", subject, to)
         return
 
-    app = current_app._get_current_object()
-    msg = Message(subject=subject, recipients=[to], html=html_body, body=text_body)
-    thread = threading.Thread(target=_send_async, args=(app, msg), daemon=True)
-    thread.start()
+    sender = app.config.get("MAIL_DEFAULT_SENDER") if app else os.environ.get("MAIL_DEFAULT_SENDER")
+    if not sender or "example" in sender:
+        mail_user = app.config.get("MAIL_USERNAME") if app else os.environ.get("MAIL_USERNAME")
+        if mail_user:
+            sender = f"{STORE_NAME} <{mail_user}>"
+
+    msg = Message(subject=subject, recipients=[to], html=html_body, body=text_body, sender=sender)
+
+    # In serverless environments (like Vercel or AWS Lambda), background threads
+    # get frozen immediately when the HTTP response finishes, which kills async SMTP calls.
+    # We must send synchronously on Vercel/serverless so the email is dispatched before the response finishes.
+    is_serverless = bool(
+        os.environ.get("VERCEL")
+        or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+        or os.environ.get("NOW_REGION")
+        or os.environ.get("MAIL_SYNC") == "true"
+    )
+
+    if is_serverless:
+        try:
+            if app:
+                with app.app_context():
+                    mail.send(msg)
+            else:
+                mail.send(msg)
+            logger.info("Sent email to %s (sync)", to)
+        except Exception as exc:
+            logger.error("Failed to send email to %s: %s", to, exc)
+    else:
+        thread = threading.Thread(target=_send_async, args=(app, msg), daemon=True)
+        thread.start()
 
 
 def _wrap_html(inner_html, preheader=""):
