@@ -14,13 +14,15 @@ const API_BASE = '';
 // CHANGE (Phase 4): holds the reset token from a password-reset email link
 // while the Reset Password form is showing.
 let pendingResetToken = null;
-// CHANGE: holds the identifier (email/phone) between the password step and
+// CHANGE: holds the identifier (email/phone) and signed OTP token between the password step and
 // the OTP step of login, since verify-otp needs it to look the account up
-// again — no session exists yet at that point.
+// again statelessly on serverless (Vercel) hosting.
 let pendingLoginIdentifier = null;
-// CHANGE: holds the email during signup OTP verification (account is created
+let pendingLoginOtpToken = null;
+// CHANGE: holds the email and signed OTP token during signup OTP verification (account is created
 // but locked until OTP is confirmed).
 let pendingSignupEmail = null;
+let pendingSignupOtpToken = null;
 let products = [];
 let cart = [];
 let wishlist = [];          // Phase 2: array of full product objects
@@ -1290,6 +1292,7 @@ function setupAuth() {
         // itself — a 6-digit code has been emailed and must be confirmed.
         if (data.otpRequired) {
             pendingLoginIdentifier = identifier;
+            pendingLoginOtpToken = data.otpToken || null;
             document.getElementById('otpHintText').textContent = data.message || 'Enter the 6-digit code we emailed you.';
             document.getElementById('loginOtpCode').value = '';
             switchAuthTab('otp');
@@ -1322,7 +1325,7 @@ function setupAuth() {
         try {
             data = await apiFetch('/api/auth/login/verify-otp', {
                 method: 'POST',
-                body: JSON.stringify({ identifier: pendingLoginIdentifier, otp }),
+                body: JSON.stringify({ identifier: pendingLoginIdentifier, otp, otpToken: pendingLoginOtpToken }),
             });
         } catch (err) {
             showAuthError(err.message);
@@ -1333,6 +1336,7 @@ function setupAuth() {
         }
 
         pendingLoginIdentifier = null;
+        pendingLoginOtpToken = null;
         await onAuthSuccess(data.user);
         showNotification(`Welcome back, ${data.user.name.split(' ')[0]}!`);
     });
@@ -1349,8 +1353,11 @@ function setupAuth() {
         try {
             const data = await apiFetch('/api/auth/login/resend-otp', {
                 method: 'POST',
-                body: JSON.stringify({ identifier: pendingLoginIdentifier }),
+                body: JSON.stringify({ identifier: pendingLoginIdentifier, otpToken: pendingLoginOtpToken }),
             });
+            if (data.otpToken) {
+                pendingLoginOtpToken = data.otpToken;
+            }
             showNotification(data.message || 'A new code has been sent.');
         } catch (err) {
             showAuthError(err.message);
@@ -1362,6 +1369,7 @@ function setupAuth() {
     document.getElementById('backToSignInFromOtp').addEventListener('click', (e) => {
         e.preventDefault();
         pendingLoginIdentifier = null;
+        pendingLoginOtpToken = null;
         switchAuthTab('signin');
     });
 
@@ -1417,6 +1425,7 @@ function setupAuth() {
         // the customer can sign in. Same flow as login OTP.
         if (data.otpRequired) {
             pendingSignupEmail = email;
+            pendingSignupOtpToken = data.otpToken || null;
             document.getElementById('signupOtpHintText').textContent = data.message || 'Enter the 6-digit code we emailed you.';
             document.getElementById('signupOtpCode').value = '';
             switchAuthTab('signup-otp');
@@ -1447,7 +1456,7 @@ function setupAuth() {
         try {
             data = await apiFetch('/api/auth/signup/verify-otp', {
                 method: 'POST',
-                body: JSON.stringify({ email: pendingSignupEmail, otp }),
+                body: JSON.stringify({ email: pendingSignupEmail, otp, otpToken: pendingSignupOtpToken }),
             });
         } catch (err) {
             showAuthError(err.message);
@@ -1458,6 +1467,7 @@ function setupAuth() {
         }
 
         pendingSignupEmail = null;
+        pendingSignupOtpToken = null;
         await onAuthSuccess(data.user);
         showNotification(`Account activated. Welcome, ${data.user.name.split(' ')[0]}!`);
     });
@@ -1474,8 +1484,11 @@ function setupAuth() {
         try {
             const data = await apiFetch('/api/auth/signup/resend-otp', {
                 method: 'POST',
-                body: JSON.stringify({ email: pendingSignupEmail }),
+                body: JSON.stringify({ email: pendingSignupEmail, otpToken: pendingSignupOtpToken }),
             });
+            if (data.otpToken) {
+                pendingSignupOtpToken = data.otpToken;
+            }
             showNotification(data.message || 'A new code has been sent.');
         } catch (err) {
             showAuthError(err.message);
@@ -1487,6 +1500,7 @@ function setupAuth() {
     document.getElementById('backToSignUpFromOtp').addEventListener('click', (e) => {
         e.preventDefault();
         pendingSignupEmail = null;
+        pendingSignupOtpToken = null;
         switchAuthTab('signup');
     });
 

@@ -32,6 +32,7 @@ from functools import wraps
 import requests
 from flask import Flask, jsonify, request, session, send_from_directory, Response
 from werkzeug.security import check_password_hash, generate_password_hash
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 import database as db
 import mail as mailer
@@ -980,8 +981,111 @@ def admin_notifications_mark_all_read():
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Phase 2 CHANGE: Customer auth API
+# Phase 2 CHANGE: Customer auth API (with Stateless Signed OTP Tokens for Vercel)
 # ─────────────────────────────────────────────────────────────────────────
+OTP_SALT = "jeevani-otp-v1"
+SIGNUP_SALT = "jeevani-signup-v1"
+
+
+def _hash_otp(otp_code):
+    """Secure SHA-256 hash of the 6-digit OTP code."""
+    return hashlib.sha256(str(otp_code).strip().encode("utf-8")).hexdigest()
+
+
+def _get_serializer():
+    return URLSafeTimedSerializer(app.config["SECRET_KEY"])
+
+
+def _issue_stateless_login_otp(row):
+    """Generates a fresh 6-digit code, saves to DB if possible (for local/persistent servers),
+    and generates a cryptographically signed HMAC token for serverless (Vercel) environments."""
+    otp_code = f"{secrets.randbelow(1000000):06d}"
+    try:
+        conn = db.get_db()
+        db.set_login_otp(conn, row["id"], otp_code)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        app.logger.warning("Could not set login OTP in DB: %s", e)
+
+    payload = {
+        "user_id": row["id"],
+        "identifier": row.get("email") or str(row["id"]),
+        "otp_hash": _hash_otp(otp_code),
+        "created_at": time.time(),
+        "type": "login",
+    }
+    s = _get_serializer()
+    token = s.dumps(payload, salt=OTP_SALT)
+    mailer.send_login_otp_email(row["email"], row["name"], otp_code, db.LOGIN_OTP_TTL_MINUTES)
+    return token
+
+
+def _verify_stateless_login_otp(token, submitted_code):
+    """Verifies signed login OTP token without relying on serverless DB storage."""
+    if not token or not submitted_code:
+        return "invalid", None
+    s = _get_serializer()
+    try:
+        payload = s.loads(token, salt=OTP_SALT, max_age=db.LOGIN_OTP_TTL_MINUTES * 60 + 30)
+    except SignatureExpired:
+        return "expired", None
+    except BadSignature:
+        return "invalid", None
+    except Exception:
+        return "invalid", None
+
+    expected_hash = payload.get("otp_hash")
+    submitted_hash = _hash_otp(submitted_code)
+    if not expected_hash or not hmac.compare_digest(expected_hash, submitted_hash):
+        return "invalid", None
+
+    return "ok", payload
+
+
+def _issue_stateless_signup_otp(user_data, otp_code=None):
+    """Generates a signed token containing signup credentials and OTP hash so
+    the account can be safely activated even across different serverless instances."""
+    if not otp_code:
+        otp_code = f"{secrets.randbelow(1000000):06d}"
+
+    payload = {
+        "name": user_data["name"],
+        "email": user_data["email"],
+        "phone": user_data["phone"],
+        "password_hash": user_data["password_hash"],
+        "otp_hash": _hash_otp(otp_code),
+        "created_at": time.time(),
+        "type": "signup",
+    }
+    s = _get_serializer()
+    token = s.dumps(payload, salt=SIGNUP_SALT)
+    mailer.send_login_otp_email(user_data["email"], user_data["name"], otp_code, db.LOGIN_OTP_TTL_MINUTES)
+    return token
+
+
+def _verify_stateless_signup_otp(token, submitted_code):
+    """Verifies signed signup OTP token without relying on serverless DB storage."""
+    if not token or not submitted_code:
+        return "invalid", None
+    s = _get_serializer()
+    try:
+        payload = s.loads(token, salt=SIGNUP_SALT, max_age=db.LOGIN_OTP_TTL_MINUTES * 60 + 30)
+    except SignatureExpired:
+        return "expired", None
+    except BadSignature:
+        return "invalid", None
+    except Exception:
+        return "invalid", None
+
+    expected_hash = payload.get("otp_hash")
+    submitted_hash = _hash_otp(submitted_code)
+    if not expected_hash or not hmac.compare_digest(expected_hash, submitted_hash):
+        return "invalid", None
+
+    return "ok", payload
+
+
 @app.route("/api/auth/signup", methods=["POST"])
 def auth_signup():
     data = request.get_json(silent=True) or {}
@@ -1000,33 +1104,37 @@ def auth_signup():
         return jsonify({"error": "Please choose a password that is at least 6 characters long."}), 400
 
     conn = db.get_db()
-
     if db.email_exists(conn, email):
         conn.close()
         return jsonify({"error": "An account with this email already exists. Please sign in instead."}), 409
 
+    pwd_hash = generate_password_hash(password)
+    # Attempt local DB insert (persists on local / VPS / Render)
     try:
-        cur = conn.execute(
+        conn.execute(
             "INSERT INTO users (name, email, phone, password_hash) VALUES (?, ?, ?, ?)",
-            (name, email, phone, generate_password_hash(password)),
+            (name, email, phone, pwd_hash),
         )
         conn.commit()
     except sqlite3.IntegrityError:
         conn.close()
         return jsonify({"error": "An account with this email already exists. Please sign in instead."}), 409
+    except Exception as e:
+        app.logger.warning("DB insert on signup (will finalize on OTP verify if needed): %s", e)
+    finally:
+        conn.close()
 
-    user_id = cur.lastrowid
-    row = db.get_user_by_id(conn, user_id)
-    conn.close()
-
-    # CHANGE (Login OTP pass): new accounts also need email verification via OTP
-    # before they can sign in. Same 6-digit code flow as login, reusing the same
-    # login_otp_* columns (no conflict since the account is brand new and hasn't
-    # signed in yet). The account exists but is locked until OTP is verified.
-    _issue_login_otp(row)
+    user_data = {
+        "name": name,
+        "email": email,
+        "phone": phone,
+        "password_hash": pwd_hash,
+    }
+    otp_token = _issue_stateless_signup_otp(user_data)
 
     return jsonify({
         "otpRequired": True,
+        "otpToken": otp_token,
         "email": email,
         "emailHint": _mask_email(email),
         "message": f"We've sent a 6-digit code to {_mask_email(email)}. Enter it below to activate your account.",
@@ -1038,72 +1146,109 @@ def auth_signup_verify_otp():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     otp = (data.get("otp") or "").strip()
+    otp_token = (data.get("otpToken") or "").strip()
 
     if not email or not otp:
         return jsonify({"error": "Please enter the 6-digit code."}), 400
 
-    # Same rate limiting as login OTP verification — keyed by email so signup
-    # and login OTP attempts don't share a bucket (they're independent flows).
+    # Same rate limiting as login OTP verification
     if rate_limited(login_rate_key("signup-otp:" + email)):
         return jsonify({"error": "Too many attempts. Please wait a few minutes and try again."}), 429
 
+    stateless_ok = False
+    signup_payload = None
+    if otp_token:
+        res, payload = _verify_stateless_signup_otp(otp_token, otp)
+        if res == "expired":
+            return jsonify({"error": "This code has expired. Please sign up again."}), 400
+        elif res == "ok" and payload and payload.get("email", "").lower() == email:
+            stateless_ok = True
+            signup_payload = payload
+
     conn = db.get_db()
     row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    if not row:
-        conn.close()
-        return jsonify({"error": "Account not found. Please sign up again."}), 400
 
-    result = db.verify_login_otp(conn, row["id"], otp)
-    conn.commit()
+    # If DB in this serverless container doesn't have the user yet, create it from verified signed payload
+    if not row and stateless_ok and signup_payload:
+        try:
+            cur = conn.execute(
+                "INSERT INTO users (name, email, phone, password_hash) VALUES (?, ?, ?, ?)",
+                (signup_payload["name"], signup_payload["email"], signup_payload["phone"], signup_payload["password_hash"]),
+            )
+            conn.commit()
+            row = db.get_user_by_id(conn, cur.lastrowid)
+        except Exception:
+            app.logger.exception("Failed to insert user on stateless OTP verify")
+            row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
 
-    if result == "expired":
-        conn.close()
-        return jsonify({"error": "This code has expired. Please sign up again."}), 400
-    if result == "locked":
-        conn.close()
-        return jsonify({"error": "Too many incorrect attempts. Please sign up again."}), 429
-    if result != "ok":
-        conn.close()
-        return jsonify({"error": "That code is incorrect. Please check and try again."}), 401
+    if not stateless_ok:
+        # Fallback to DB check (for local development or when token wasn't provided)
+        if not row:
+            conn.close()
+            return jsonify({"error": "That code is incorrect. Please check and try again."}), 401
+        result = db.verify_login_otp(conn, row["id"], otp)
+        conn.commit()
+        if result == "expired":
+            conn.close()
+            return jsonify({"error": "This code has expired. Please sign up again."}), 400
+        if result == "locked":
+            conn.close()
+            return jsonify({"error": "Too many incorrect attempts. Please sign up again."}), 429
+        if result != "ok":
+            conn.close()
+            return jsonify({"error": "That code is incorrect. Please check and try again."}), 401
 
-    db.clear_login_otp(conn, row["id"])
-    conn.commit()
+    if row:
+        try:
+            db.clear_login_otp(conn, row["id"])
+            conn.commit()
+        except Exception:
+            pass
+        session["user_id"] = row["id"]
+        session.permanent = True
+        user_dict = db.row_to_user(row)
+        conn.close()
+        return jsonify({"success": True, "user": user_dict})
+
     conn.close()
-
-    # OTP verified — now create the session and the account is active.
-    session["user_id"] = row["id"]
-    session.permanent = True
-
-    return jsonify({"success": True, "user": db.row_to_user(row)})
+    return jsonify({"error": "Failed to activate account. Please sign up again."}), 400
 
 
 @app.route("/api/auth/signup/resend-otp", methods=["POST"])
 def auth_signup_resend_otp():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
+    otp_token = (data.get("otpToken") or "").strip()
 
     if not email:
         return jsonify({"error": "Please sign up again."}), 400
 
-    # Rate-limited like login resend, so "resend" can't be used to spam a mailbox.
     if rate_limited(login_rate_key("signup-otp-resend:" + email)):
         return jsonify({"error": "Please wait a little before requesting another code."}), 429
 
-    conn = db.get_db()
-    row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
-    conn.close()
+    new_token = None
+    if otp_token:
+        s = _get_serializer()
+        try:
+            payload = s.loads(otp_token, salt=SIGNUP_SALT, max_age=1800)
+            if payload and payload.get("email", "").lower() == email:
+                new_token = _issue_stateless_signup_otp(payload)
+        except Exception:
+            pass
 
-    # Security fix: identical response whether or not the email matches a
-    # pending signup, so this endpoint can't enumerate emails.
-    if row and not row["is_blocked"] and row["email"]:
-        _issue_login_otp(row)
+    if not new_token:
+        conn = db.get_db()
+        row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        conn.close()
+        if row and not row["is_blocked"] and row["email"]:
+            new_token = _issue_login_otp(row)
 
-    return jsonify({"success": True, "message": "If that account exists, a new code has been sent."})
+    return jsonify({"success": True, "otpToken": new_token, "message": "If that account exists, a new code has been sent."})
 
 
 def _mask_email(email):
     """al***@gmail.com — enough for the customer to recognise their own
-    inbox on the "enter the code we sent" screen without fully re-exposing
+    inbox on the 'enter the code we sent' screen without fully re-exposing
     the address to anyone watching the response."""
     try:
         local, domain = email.split("@", 1)
@@ -1118,14 +1263,8 @@ def _mask_email(email):
 
 def _issue_login_otp(row):
     """Generates a fresh 6-digit code, stores it against this user, and
-    emails it. Used by both the initial login attempt and the resend
-    endpoint so the two stay in sync."""
-    otp_code = f"{secrets.randbelow(1000000):06d}"
-    conn = db.get_db()
-    db.set_login_otp(conn, row["id"], otp_code)
-    conn.commit()
-    conn.close()
-    mailer.send_login_otp_email(row["email"], row["name"], otp_code, db.LOGIN_OTP_TTL_MINUTES)
+    emails it. Returns the signed token for stateless serverless verification."""
+    return _issue_stateless_login_otp(row)
 
 
 def _notify_admin_of_login(row):
@@ -1174,27 +1313,19 @@ def auth_login():
     if not row or not check_password_hash(row["password_hash"], password):
         return jsonify({"error": "We could not find an account matching those details. Please check and try again, or create a new account."}), 401
 
-    # Phase 6 CHANGE: admin-blocked accounts can't sign in. Checked after the
-    # password check (not before) so a blocked-account probe can't be used
-    # to enumerate which emails/phones exist independently of credentials.
     if row["is_blocked"]:
         return jsonify({"error": "This account has been suspended. Please contact support for assistance."}), 403
 
-    # CHANGE: password alone no longer creates a session. A 6-digit code is
-    # emailed to the account and must be confirmed via
-    # /api/auth/login/verify-otp before sign-in completes — the customer_login
-    # notification (DB row + admin email) now fires from that step instead.
     if not row["email"]:
-        # No email on file to send a code to — extremely unlikely (signup
-        # requires one) but fail safe rather than lock the customer out.
         session["user_id"] = row["id"]
         session.permanent = True
         _notify_admin_of_login(row)
         return jsonify({"success": True, "user": db.row_to_user(row)})
 
-    _issue_login_otp(row)
+    otp_token = _issue_login_otp(row)
     return jsonify({
         "otpRequired": True,
+        "otpToken": otp_token,
         "identifier": identifier,
         "emailHint": _mask_email(row["email"]),
         "message": f"We've sent a 6-digit code to {_mask_email(row['email'])}. Enter it below to finish signing in.",
@@ -1206,18 +1337,29 @@ def auth_login_verify_otp():
     data = request.get_json(silent=True) or {}
     identifier = (data.get("identifier") or "").strip()
     otp = (data.get("otp") or "").strip()
+    otp_token = (data.get("otpToken") or "").strip()
 
     if not identifier or not otp:
         return jsonify({"error": "Please enter the 6-digit code."}), 400
 
-    # Security fix: same brute-force protection as the password step —
-    # keyed separately so guessing OTPs doesn't share (or exhaust) the
-    # password attempt budget, and vice versa.
     if rate_limited(login_rate_key("otp:" + identifier)):
         return jsonify({"error": "Too many attempts. Please wait a few minutes and try again."}), 429
 
+    stateless_ok = False
+    token_user_id = None
+    if otp_token:
+        res, payload = _verify_stateless_login_otp(otp_token, otp)
+        if res == "expired":
+            return jsonify({"error": "This code has expired. Please request a new one."}), 400
+        elif res == "ok" and payload:
+            stateless_ok = True
+            token_user_id = payload.get("user_id")
+
     conn = db.get_db()
     row = db.get_user_by_identifier(conn, identifier)
+    if not row and token_user_id:
+        row = db.get_user_by_id(conn, token_user_id)
+
     if not row:
         conn.close()
         return jsonify({"error": "Session expired. Please sign in again."}), 400
@@ -1226,21 +1368,25 @@ def auth_login_verify_otp():
         conn.close()
         return jsonify({"error": "This account has been suspended. Please contact support for assistance."}), 403
 
-    result = db.verify_login_otp(conn, row["id"], otp)
-    conn.commit()
+    if not stateless_ok:
+        # Fallback to DB check
+        result = db.verify_login_otp(conn, row["id"], otp)
+        conn.commit()
+        if result == "expired":
+            conn.close()
+            return jsonify({"error": "This code has expired. Please request a new one."}), 400
+        if result == "locked":
+            conn.close()
+            return jsonify({"error": "Too many incorrect attempts. Please request a new code."}), 429
+        if result != "ok":
+            conn.close()
+            return jsonify({"error": "That code is incorrect. Please check and try again."}), 401
 
-    if result == "expired":
-        conn.close()
-        return jsonify({"error": "This code has expired. Please request a new one."}), 400
-    if result == "locked":
-        conn.close()
-        return jsonify({"error": "Too many incorrect attempts. Please request a new code."}), 429
-    if result != "ok":
-        conn.close()
-        return jsonify({"error": "That code is incorrect. Please check and try again."}), 401
-
-    db.clear_login_otp(conn, row["id"])
-    conn.commit()
+    try:
+        db.clear_login_otp(conn, row["id"])
+        conn.commit()
+    except Exception:
+        pass
     conn.close()
 
     session["user_id"] = row["id"]
@@ -1259,8 +1405,6 @@ def auth_login_resend_otp():
     if not identifier:
         return jsonify({"error": "Please sign in again."}), 400
 
-    # Security fix: rate-limited like every other email-sending endpoint, so
-    # "resend" can't be used to spam a mailbox.
     if rate_limited(login_rate_key("otp-resend:" + identifier)):
         return jsonify({"error": "Please wait a little before requesting another code."}), 429
 
@@ -1268,12 +1412,11 @@ def auth_login_resend_otp():
     row = db.get_user_by_identifier(conn, identifier)
     conn.close()
 
-    # Security fix: identical response whether or not the identifier still
-    # matches an account, so this can't be used to enumerate users either.
+    otp_token = None
     if row and not row["is_blocked"] and row["email"]:
-        _issue_login_otp(row)
+        otp_token = _issue_login_otp(row)
 
-    return jsonify({"success": True, "message": "If that account exists, a new code has been sent."})
+    return jsonify({"success": True, "otpToken": otp_token, "message": "If that account exists, a new code has been sent."})
 
 
 @app.route("/api/auth/logout", methods=["POST"])
