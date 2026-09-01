@@ -1,5 +1,8 @@
 # ── Secrets & config ──
 .env
+.env*
+*.env
+a.env
 notes.env
 *.csv
 

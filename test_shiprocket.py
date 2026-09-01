@@ -14,6 +14,7 @@ you'll see the real error.
 import os
 from dotenv import load_dotenv
 load_dotenv()
+load_dotenv("a.env")
 
 import requests
 

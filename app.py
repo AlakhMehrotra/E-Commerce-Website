@@ -17,6 +17,7 @@ Then open http://localhost:5000
 import os
 from dotenv import load_dotenv
 load_dotenv()
+load_dotenv("a.env")
 import re
 import time
 import datetime
