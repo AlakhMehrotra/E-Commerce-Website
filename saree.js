@@ -14,6 +14,13 @@ const API_BASE = '';
 // CHANGE (Phase 4): holds the reset token from a password-reset email link
 // while the Reset Password form is showing.
 let pendingResetToken = null;
+// CHANGE: holds the identifier (email/phone) between the password step and
+// the OTP step of login, since verify-otp needs it to look the account up
+// again — no session exists yet at that point.
+let pendingLoginIdentifier = null;
+// CHANGE: holds the email during signup OTP verification (account is created
+// but locked until OTP is confirmed).
+let pendingSignupEmail = null;
 let products = [];
 let cart = [];
 let wishlist = [];          // Phase 2: array of full product objects
@@ -380,7 +387,7 @@ function openProduct(productId, pushUrl = true) {
     // the address bar and tab title correct during in-app navigation too.
     if (product.slug) {
         if (pushUrl) window.history.pushState(null, '', `/product/${product.slug}`);
-        document.title = `${product.name} — ₹${product.price.toLocaleString('en-IN')} | Shri Jeevani Sarees`;
+        document.title = `${product.name} — ₹${product.price.toLocaleString('en-IN')} | Shri Jeewani Saree Center`;
     }
     trackPageView(product.slug ? `/product/${product.slug}` : `/product/${product.id}`, product.id);
 }
@@ -593,7 +600,7 @@ function renderCart() {
 
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     const tax = subtotal * 0.05;
-    const shipping = subtotal > 50000 ? 0 : 500;
+    const shipping = 0;
     const total = subtotal + tax + shipping;
 
     cartItemsDiv.innerHTML = `
@@ -846,10 +853,19 @@ function closeProductModal() {
 function computeCartTotals() {
     const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
     const tax = Math.round(subtotal * 0.05);
-    const shipping = subtotal > 50000 ? 0 : 500;
-    const discount = appliedCoupon ? Math.min(appliedCoupon.discount, subtotal) : 0;
+    const paymentEl = document.querySelector('input[name="payment"]:checked');
+    const paymentMethod = paymentEl ? paymentEl.value : 'cod';
+
+    // CHANGE: COD carries a small handling surcharge; UPI/Card get an
+    // incentive discount. Mirrors build_order_from_cart() in app.py exactly
+    // so this preview always matches what /api/orders actually charges.
+    let shipping = paymentMethod === 'cod' ? 50 : 0;
+
+    const couponDiscount = appliedCoupon ? Math.min(appliedCoupon.discount, subtotal) : 0;
+    const onlineDiscount = (paymentMethod === 'upi' || paymentMethod === 'card') ? Math.round(subtotal * 0.10) : 0;
+    const discount = couponDiscount + onlineDiscount;
     const total = Math.max(subtotal + tax + shipping - discount, 0);
-    return { subtotal, tax, shipping, discount, total };
+    return { subtotal, tax, shipping, couponDiscount, onlineDiscount, discount, total, paymentMethod };
 }
 
 function openCheckout() {
@@ -886,14 +902,15 @@ function openCheckout() {
 }
 
 function renderOrderSummary() {
-    const { subtotal, tax, shipping, discount, total } = computeCartTotals();
+    const { subtotal, tax, shipping, couponDiscount, onlineDiscount, total, paymentMethod } = computeCartTotals();
     document.getElementById('orderSummary').innerHTML = `
         <h3>Order Summary</h3>
         <div class="order-summary-row"><span>Total Items:</span><span>${cart.reduce((s, i) => s + i.quantity, 0)}</span></div>
         <div class="order-summary-row"><span>Subtotal:</span><span>₹${subtotal.toLocaleString('en-IN')}</span></div>
         <div class="order-summary-row"><span>Tax (5%):</span><span>₹${tax.toLocaleString('en-IN')}</span></div>
-        <div class="order-summary-row"><span>Shipping:</span><span>${shipping === 0 ? 'FREE' : '₹' + shipping.toLocaleString('en-IN')}</span></div>
-        ${discount > 0 ? `<div class="order-summary-row discount"><span>Discount (${appliedCoupon.code}):</span><span>-₹${discount.toLocaleString('en-IN')}</span></div>` : ''}
+        <div class="order-summary-row"><span>Shipping${paymentMethod === 'cod' ? ' (incl. ₹50 COD fee)' : ''}:</span><span>${shipping === 0 ? 'FREE' : '₹' + shipping.toLocaleString('en-IN')}</span></div>
+        ${onlineDiscount > 0 ? `<div class="order-summary-row discount"><span>Online Payment Discount (10%):</span><span>-₹${onlineDiscount.toLocaleString('en-IN')}</span></div>` : ''}
+        ${couponDiscount > 0 ? `<div class="order-summary-row discount"><span>Discount (${appliedCoupon.code}):</span><span>-₹${couponDiscount.toLocaleString('en-IN')}</span></div>` : ''}
         <div class="order-summary-row total"><span>Total:</span><span>₹${total.toLocaleString('en-IN')}</span></div>
     `;
 }
@@ -1016,7 +1033,7 @@ function placeOrder() {
                 amount: rpData.amount,
                 currency: rpData.currency,
                 order_id: rpData.razorpayOrderId,
-                name: 'Shri Jeevani Sarees',
+                name: 'Shri Jeewani Saree Center',
                 description: `Order ${rpData.orderNumber}`,
                 prefill: { name, contact: phone, email: currentUser.email || '' },
                 theme: { color: '#0F5C56' },
@@ -1251,6 +1268,10 @@ function setupAuth() {
         const identifier = document.getElementById('signInEmail').value.trim();
         const password = document.getElementById('signInPassword').value;
 
+        const submitBtn = this.querySelector('.auth-submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing In...';
+
         let data;
         try {
             data = await apiFetch('/api/auth/login', {
@@ -1260,10 +1281,98 @@ function setupAuth() {
         } catch (err) {
             showAuthError(err.message);
             return;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Sign In';
         }
 
+        // CHANGE: a correct password no longer signs the customer in by
+        // itself — a 6-digit code has been emailed and must be confirmed.
+        if (data.otpRequired) {
+            pendingLoginIdentifier = identifier;
+            document.getElementById('otpHintText').textContent = data.message || 'Enter the 6-digit code we emailed you.';
+            document.getElementById('loginOtpCode').value = '';
+            switchAuthTab('otp');
+            return;
+        }
+
+        // Fallback path (accounts with no email on file skip the OTP step
+        // server-side and log in immediately).
         await onAuthSuccess(data.user);
         showNotification(`Welcome back, ${data.user.name.split(' ')[0]}!`);
+    });
+
+    // CHANGE: Login OTP form — the second step of every sign-in.
+    document.getElementById('loginOtpForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        clearAuthError();
+
+        // Safari fix: strip any non-digits, handle spaces/dashes gracefully
+        let otp = document.getElementById('loginOtpCode').value.trim().replace(/\D/g, '');
+        if (otp.length !== 6) {
+            showAuthError('Please enter the 6-digit code.');
+            return;
+        }
+
+        const submitBtn = this.querySelector('.auth-submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Verifying...';
+
+        let data;
+        try {
+            data = await apiFetch('/api/auth/login/verify-otp', {
+                method: 'POST',
+                body: JSON.stringify({ identifier: pendingLoginIdentifier, otp }),
+            });
+        } catch (err) {
+            showAuthError(err.message);
+            return;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Verify & Sign In';
+        }
+
+        pendingLoginIdentifier = null;
+        await onAuthSuccess(data.user);
+        showNotification(`Welcome back, ${data.user.name.split(' ')[0]}!`);
+    });
+
+    document.getElementById('resendOtpLink').addEventListener('click', async (e) => {
+        e.preventDefault();
+        clearAuthError();
+        if (!pendingLoginIdentifier) return;
+
+        const link = e.target;
+        const originalText = link.textContent;
+        link.textContent = 'Sending...';
+
+        try {
+            const data = await apiFetch('/api/auth/login/resend-otp', {
+                method: 'POST',
+                body: JSON.stringify({ identifier: pendingLoginIdentifier }),
+            });
+            showNotification(data.message || 'A new code has been sent.');
+        } catch (err) {
+            showAuthError(err.message);
+        } finally {
+            link.textContent = originalText;
+        }
+    });
+
+    document.getElementById('backToSignInFromOtp').addEventListener('click', (e) => {
+        e.preventDefault();
+        pendingLoginIdentifier = null;
+        switchAuthTab('signin');
+    });
+
+    // CHANGE: OTP input filter for Safari compatibility — strip non-digits in real time
+    // so the user can't accidentally type letters/dashes. This works cross-browser.
+    document.getElementById('loginOtpCode').addEventListener('input', function (e) {
+        this.value = this.value.replace(/\D/g, '').slice(0, 6);
+    });
+
+    document.getElementById('signupOtpCode').addEventListener('input', function (e) {
+        this.value = this.value.replace(/\D/g, '').slice(0, 6);
     });
 
     signUpForm.addEventListener('submit', async function (e) {
@@ -1285,6 +1394,10 @@ function setupAuth() {
             return;
         }
 
+        const submitBtn = this.querySelector('.auth-submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating Account...';
+
         let data;
         try {
             data = await apiFetch('/api/auth/signup', {
@@ -1295,10 +1408,86 @@ function setupAuth() {
             showAuthError(err.message);
             if (/already exists/i.test(err.message)) switchAuthTab('signin');
             return;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Create Account';
         }
 
+        // CHANGE: account is created but needs OTP email verification before
+        // the customer can sign in. Same flow as login OTP.
+        if (data.otpRequired) {
+            pendingSignupEmail = email;
+            document.getElementById('signupOtpHintText').textContent = data.message || 'Enter the 6-digit code we emailed you.';
+            document.getElementById('signupOtpCode').value = '';
+            switchAuthTab('signup-otp');
+            return;
+        }
+
+        // Fallback (should not happen in normal flow).
         await onAuthSuccess(data.user);
         showNotification(`Account created. Welcome, ${data.user.name.split(' ')[0]}!`);
+    });
+
+    // CHANGE: Signup OTP form — email verification for new accounts.
+    document.getElementById('signupOtpForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        clearAuthError();
+
+        let otp = document.getElementById('signupOtpCode').value.trim().replace(/\D/g, '');
+        if (otp.length !== 6) {
+            showAuthError('Please enter the 6-digit code.');
+            return;
+        }
+
+        const submitBtn = this.querySelector('.auth-submit');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Verifying...';
+
+        let data;
+        try {
+            data = await apiFetch('/api/auth/signup/verify-otp', {
+                method: 'POST',
+                body: JSON.stringify({ email: pendingSignupEmail, otp }),
+            });
+        } catch (err) {
+            showAuthError(err.message);
+            return;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Verify & Activate Account';
+        }
+
+        pendingSignupEmail = null;
+        await onAuthSuccess(data.user);
+        showNotification(`Account activated. Welcome, ${data.user.name.split(' ')[0]}!`);
+    });
+
+    document.getElementById('resendSignupOtpLink').addEventListener('click', async (e) => {
+        e.preventDefault();
+        clearAuthError();
+        if (!pendingSignupEmail) return;
+
+        const link = e.target;
+        const originalText = link.textContent;
+        link.textContent = 'Sending...';
+
+        try {
+            const data = await apiFetch('/api/auth/signup/resend-otp', {
+                method: 'POST',
+                body: JSON.stringify({ email: pendingSignupEmail }),
+            });
+            showNotification(data.message || 'A new code has been sent.');
+        } catch (err) {
+            showAuthError(err.message);
+        } finally {
+            link.textContent = originalText;
+        }
+    });
+
+    document.getElementById('backToSignUpFromOtp').addEventListener('click', (e) => {
+        e.preventDefault();
+        pendingSignupEmail = null;
+        switchAuthTab('signup');
     });
 
     document.getElementById('signOutBtn').addEventListener('click', async () => {
@@ -1353,18 +1542,24 @@ function switchAuthTab(which) {
     const signUpForm = document.getElementById('signUpForm');
     const forgotForm = document.getElementById('forgotPasswordForm');
     const resetForm = document.getElementById('resetPasswordForm');
+    const otpForm = document.getElementById('loginOtpForm');
+    const signupOtpForm = document.getElementById('signupOtpForm');
 
     clearAuthError();
     document.getElementById('authSuccess').classList.add('hidden');
 
     // CHANGE (Phase 4): 'forgot' and 'reset' are standalone panels — no tabs,
-    // just the one form plus a way back to Sign In.
-    if (which === 'forgot' || which === 'reset') {
+    // just the one form plus a way back to Sign In. CHANGE: 'otp' (the
+    // second step of every login) works the same way. CHANGE: 'signup-otp'
+    // (email verification after creating an account) is also standalone.
+    if (which === 'forgot' || which === 'reset' || which === 'otp' || which === 'signup-otp') {
         tabs.style.display = 'none';
         signInForm.classList.add('hidden');
         signUpForm.classList.add('hidden');
         forgotForm.classList.toggle('hidden', which !== 'forgot');
         resetForm.classList.toggle('hidden', which !== 'reset');
+        otpForm.classList.toggle('hidden', which !== 'otp');
+        signupOtpForm.classList.toggle('hidden', which !== 'signup-otp');
         if (which === 'forgot') document.getElementById('forgotEmail').value = '';
         if (which === 'reset') document.getElementById('resetNewPassword').value = '';
         return;
@@ -1372,6 +1567,8 @@ function switchAuthTab(which) {
 
     forgotForm.classList.add('hidden');
     resetForm.classList.add('hidden');
+    otpForm.classList.add('hidden');
+    signupOtpForm.classList.add('hidden');
     tabs.style.display = currentUser ? 'none' : 'flex';
 
     if (which === 'signin') {
@@ -1467,6 +1664,16 @@ function renderMyOrders() {
             ? `<div class="my-order-tracking"><div class="tracking-step cancelled"></div><div class="tracking-step cancelled"></div><div class="tracking-step cancelled"></div></div>`
             : `<div class="my-order-tracking">${ORDER_STATUS_STEPS.map((s, i) => `<div class="tracking-step${i <= currentStepIndex ? ' done' : ''}"></div>`).join('')}</div>`;
 
+        // CHANGE: one-time Replace/Return option — only offered once the
+        // order is delivered, and only if the customer hasn't used their
+        // single replace-or-return allowance on it yet. No "already used"
+        // messaging anywhere; the button just isn't there a second time.
+        const canRequestReturn = order.orderStatus === 'delivered' && !order.replacementUsed;
+        // CHANGE: customer can cancel their own order only while it's still
+        // "placed" — once the shop marks it shipped, cancellation has to go
+        // through support instead (see cancel_order() in app.py).
+        const canCancel = order.orderStatus === 'placed';
+
         return `
         <div class="my-order-card">
             <div class="my-order-card-top">
@@ -1477,8 +1684,76 @@ function renderMyOrders() {
             <div class="my-order-items">${itemsSummary}</div>
             ${tracking}
             <div class="my-order-total"><span>Total</span><span>₹${order.total.toLocaleString('en-IN')}</span></div>
+            ${canRequestReturn ? `<button type="button" class="my-order-return-btn" onclick="openReturnRequestModal('${order.orderNumber}')" style="margin-top:0.6rem; width:100%; padding:0.5rem; border-radius:8px; border:1px solid var(--dark-cream); background:transparent; cursor:pointer; font-family:inherit; font-size:0.85rem;">Request Replacement / Return</button>` : ''}
+            ${canCancel ? `<button type="button" class="my-order-cancel-btn" onclick="cancelMyOrder('${order.orderNumber}')" style="margin-top:0.6rem; width:100%; padding:0.5rem; border-radius:8px; border:1px solid #c0392b; color:#c0392b; background:transparent; cursor:pointer; font-family:inherit; font-size:0.85rem;">Cancel Order</button>` : ''}
         </div>`;
     }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Return / Replacement Requests (customer side)
+// ═══════════════════════════════════════════════════════════════════════
+let returnRequestOrderNumber = null;
+
+function openReturnRequestModal(orderNumber) {
+    returnRequestOrderNumber = orderNumber;
+    document.getElementById('returnRequestOrderNumber').textContent = orderNumber;
+    document.getElementById('returnRequestType').value = 'replace';
+    document.getElementById('returnRequestReason').value = '';
+    document.getElementById('returnRequestError').textContent = '';
+    const btn = document.getElementById('returnRequestSubmitBtn');
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit Request'; }
+    document.getElementById('returnRequestModal').classList.add('active');
+}
+
+function closeReturnRequestModal() {
+    document.getElementById('returnRequestModal').classList.remove('active');
+}
+
+async function submitReturnRequest() {
+    if (!returnRequestOrderNumber) return;
+    const type = document.getElementById('returnRequestType').value;
+    const reason = document.getElementById('returnRequestReason').value.trim();
+    const errEl = document.getElementById('returnRequestError');
+    const btn = document.getElementById('returnRequestSubmitBtn');
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Submitting...';
+
+    try {
+        const updatedOrder = await apiFetch(`/api/orders/${returnRequestOrderNumber}/return-request`, {
+            method: 'POST',
+            body: JSON.stringify({ type, reason }),
+        });
+        // Keep the local cache in sync so the button disappears immediately
+        // without needing a full re-fetch.
+        const idx = myOrdersCache.findIndex(o => o.orderNumber === returnRequestOrderNumber);
+        if (idx !== -1) myOrdersCache[idx] = { ...myOrdersCache[idx], ...updatedOrder };
+        renderMyOrders();
+        closeReturnRequestModal();
+        showNotification('Your request has been submitted. Our team will reach out soon.');
+    } catch (err) {
+        errEl.textContent = err.message || 'Could not submit your request. Please try again.';
+        btn.disabled = false;
+        btn.textContent = 'Submit Request';
+    }
+}
+
+// CHANGE: customer-initiated cancellation, for orders still in "placed"
+// status. Simple confirm() + API call — no modal needed since there's
+// nothing to fill in (unlike the return/replace request above).
+async function cancelMyOrder(orderNumber) {
+    if (!confirm(`Cancel order #${orderNumber}? This can't be undone.`)) return;
+
+    try {
+        const updatedOrder = await apiFetch(`/api/orders/${orderNumber}/cancel`, { method: 'POST' });
+        const idx = myOrdersCache.findIndex(o => o.orderNumber === orderNumber);
+        if (idx !== -1) myOrdersCache[idx] = { ...myOrdersCache[idx], ...updatedOrder };
+        renderMyOrders();
+        showNotification('Your order has been cancelled.');
+    } catch (err) {
+        alert(err.message || 'Could not cancel this order. Please try again.');
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1859,6 +2134,10 @@ function switchAdminTab(which) {
         document.getElementById('adminTabOrders').classList.add('active');
         document.getElementById('adminOrdersPanel').classList.add('active');
         refreshAdminOrders();
+    } else if (which === 'returns') {
+        document.getElementById('adminTabReturns').classList.add('active');
+        document.getElementById('adminReturnsPanel').classList.add('active');
+        refreshAdminReturns();
     } else if (which === 'coupons') {
         document.getElementById('adminTabCoupons').classList.add('active');
         document.getElementById('adminCouponsPanel').classList.add('active');
@@ -1906,12 +2185,9 @@ async function refreshAdminOrders() {
 
     const statuses = ['placed', 'shipped', 'delivered', 'cancelled'];
     tbody.innerHTML = orders.map(o => {
-        // Security fix: customerName/phone/item names are customer-supplied
-        // (from the checkout form) and rendered here inside the ADMIN's
-        // authenticated session — must be escaped or a malicious checkout
-        // name becomes stored XSS that runs with admin privileges.
         const itemsSummary = o.items.map(i => `${escapeHtml(i.name)} × ${i.quantity}`).join(', ');
         const date = new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+
         return `
         <tr>
             <td>${escapeHtml(o.orderNumber)}</td>
@@ -1937,6 +2213,53 @@ async function updateOrderStatus(orderId, status) {
         alert('Failed to update order: ' + err.message);
     }
     refreshAdminOrders();
+}
+
+// ─── Admin Returns / Replacements ──────────────────────────────────────
+async function refreshAdminReturns() {
+    const tbody = document.getElementById('adminReturnsBody');
+    if (!tbody) return;
+
+    let requests;
+    try {
+        requests = await apiFetch('/api/admin/return-requests');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6">Failed to load requests: ${err.message}</td></tr>`;
+        return;
+    }
+
+    if (requests.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--stone-soft);">No return/replacement requests yet.</td></tr>`;
+        return;
+    }
+
+    const statuses = ['pending', 'approved', 'rejected', 'completed'];
+    tbody.innerHTML = requests.map(r => {
+        const date = new Date(r.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        return `
+        <tr>
+            <td>${escapeHtml(r.orderNumber)}</td>
+            <td>${escapeHtml(r.customerName)}<br><span style="font-size:0.82rem; color:var(--stone-soft);">${escapeHtml(r.customerPhone)}</span></td>
+            <td style="text-transform:capitalize;">${escapeHtml(r.type)}</td>
+            <td style="max-width:220px;">${escapeHtml(r.reason) || '—'}</td>
+            <td>${date}</td>
+            <td>
+                <select onchange="updateReturnRequestStatus(${r.id}, this.value)" style="padding:0.3rem 0.5rem; border-radius:6px; border:1px solid var(--dark-cream); font-family:inherit;">
+                    ${statuses.map(s => `<option value="${s}" ${s === r.status ? 'selected' : ''}>${s.charAt(0).toUpperCase() + s.slice(1)}</option>`).join('')}
+                </select>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function updateReturnRequestStatus(requestId, status) {
+    try {
+        await apiFetch(`/api/admin/return-requests/${requestId}`, { method: 'PUT', body: JSON.stringify({ status }) });
+        showNotification('Request status updated.');
+    } catch (err) {
+        alert('Failed to update request: ' + err.message);
+    }
+    refreshAdminReturns();
 }
 
 // ─── Admin Coupons ──────────────────────────────────────────────────────
@@ -2520,6 +2843,38 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
+// CHANGE: Video loading error handling — if a video fails to load, show the
+// fallback text instead so the collection card doesn't look broken.
+document.addEventListener('DOMContentLoaded', () => {
+    const videos = document.querySelectorAll('.collection-video-container video');
+    videos.forEach(video => {
+        const fallback = video.closest('.collection-video-container').querySelector('.video-fallback');
+        if (!fallback) return;
+
+        // Show fallback if video fails to load
+        video.addEventListener('error', () => {
+            fallback.style.display = 'flex';
+            fallback.style.alignItems = 'center';
+            fallback.style.justifyContent = 'center';
+        });
+
+        // Hide fallback when video starts playing successfully
+        video.addEventListener('playing', () => {
+            fallback.style.display = 'none';
+        });
+
+        // Attempt to load the video — if it fails within 3 seconds, show fallback
+        video.addEventListener('loadstart', () => {
+            const timeout = setTimeout(() => {
+                if (video.readyState === 0) { // HAVE_NOTHING state
+                    fallback.style.display = 'flex';
+                }
+            }, 3000);
+            video.addEventListener('loadeddata', () => clearTimeout(timeout), { once: true });
+        });
+    });
+});
+
 // ─── Image Upload Preview ───────────────────────────────────────────────
 function previewUploadedImage(event) {
     const file = event.target.files[0];
@@ -2660,3 +3015,4 @@ document.addEventListener("keydown", function(event) {
         window.location.href = "admin.html";
     }
 });
+

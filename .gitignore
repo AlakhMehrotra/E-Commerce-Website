@@ -1,0 +1,35 @@
+# ── Secrets & config ──
+.env
+notes.env
+*.csv
+
+# ── Database ──
+*.db
+*.sqlite
+
+# ── Python ──
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# ── Large media ──
+powerloom.mp4
+handloom.mp4
+
+# ── macOS ──
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── IDE / editors ──
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Logs ──
+*.log

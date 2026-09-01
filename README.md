@@ -102,6 +102,33 @@ Real backend behind your existing, unchanged storefront and admin UI.
   existing Products tab. Orders can have their status updated (auto-restocks
   on cancel); coupons can be created, disabled/enabled, and deleted.
 
+## What changed in this pass (Login OTP + admin login alerts)
+- **Login now needs a 6-digit email code, every time.** A correct password
+  no longer creates a session by itself — the server emails a 6-digit code
+  to the account (`POST /api/auth/login` now returns `{otpRequired: true}`
+  instead of logging in) and the customer must confirm it via
+  `POST /api/auth/login/verify-otp` before a session is created. Codes
+  expire after 5 minutes and lock out after 5 wrong guesses; `POST
+  /api/auth/login/resend-otp` issues a fresh one.
+- **Signup also requires a 6-digit email code.** A new account is created
+  but locked until the customer verifies their email address via `POST
+  /api/auth/signup/verify-otp` (after account creation returns
+  `{otpRequired: true}`). `POST /api/auth/signup/resend-otp` resends the
+  code. Same 5-minute TTL and 5-attempt limit as login OTP; both flows
+  reuse the same database columns since they don't overlap (you can't be
+  signing up and logging in to the same email simultaneously).
+- **Admin gets emailed on every customer login**, in addition to the
+  existing notification-bell row in the admin panel — both now fire once
+  the OTP is confirmed (previously the bell notification fired on the
+  password step, before OTP existed). Sent to `ADMIN_NOTIFY_EMAIL`,
+  defaulting to whatever Gmail/SMTP inbox is already configured for order
+  emails, so this needs no extra setup once `MAIL_*` is set.
+- All three endpoints (`login`, `login/verify-otp`, `login/resend-otp`,
+  `signup`, `signup/verify-otp`, `signup/resend-otp`) are rate-limited the
+  same way the existing login/reset endpoints are, and the resend/verify
+  responses never reveal whether an identifier has an account
+  (same anti-enumeration approach as forgot-password).
+
 ## Setup
 
 ```bash
@@ -148,6 +175,11 @@ export RAZORPAY_WEBHOOK_SECRET="your-razorpay-webhook-secret"
 # Only set this to "true" for local http://localhost development. Leave
 # unset (or "false") in production so the session cookie requires HTTPS.
 export JEEVANI_INSECURE_COOKIE=false
+
+# Where "a customer just logged in" email alerts are sent (Login OTP pass).
+# Falls back to MAIL_USERNAME (the same inbox already used to send order
+# emails) if unset, so no extra setup is needed once SMTP is configured.
+export ADMIN_NOTIFY_EMAIL="you@yourdomain.com"
 
 # Phase 4 — SMTP (optional but recommended). Without MAIL_SERVER set, order
 # confirmation, shipping confirmation, and password-reset emails are simply
@@ -207,7 +239,13 @@ they only seed the initial admin account once.
 | GET | `/api/admin/session` | — | `{loggedIn, username}` |
 | GET/POST/PUT/DELETE | `/api/admin/products[/<id>]` | admin | Product CRUD |
 | GET | `/api/admin/stats` | admin | Dashboard stat cards |
-| POST | `/api/auth/signup` \| `/login` \| `/logout` | — | Customer accounts |
+| POST | `/api/auth/signup` | — | Step 1: creates account, emails a 6-digit code |
+| POST | `/api/auth/signup/verify-otp` | — | Step 2: confirms the code, activates the account |
+| POST | `/api/auth/signup/resend-otp` | — | Resends the signup verification code |
+| POST | `/api/auth/login` | — | Step 1: checks password, emails a 6-digit code |
+| POST | `/api/auth/login/verify-otp` | — | Step 2: confirms the code, creates the session |
+| POST | `/api/auth/login/resend-otp` | — | Resends the login code |
+| POST | `/api/auth/logout` | — | Clears customer session |
 | GET | `/api/auth/session` | — | Current customer session |
 | POST | `/api/auth/forgot-password` | — | Email a password reset link |
 | POST | `/api/auth/reset-password` | — | Consume a reset token, set new password |

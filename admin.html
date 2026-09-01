@@ -1,666 +1,1841 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Shri Jeevani Admin Panel</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shri Jeewani Saree Center Admin Panel</title>
+    <link rel="icon" type="image/png" href="/logo.png" sizes="32x32">
+    <link rel="apple-touch-icon" href="/logo.png" sizes="180x180">
 
-<style>
+    <style>
+        :root {
+            --maroon: #7a1f2b;
+            --maroon-dark: #5c1620;
+            --gold: #c9a13b;
+            --gold-light: #f3e4bb;
+            --cream: #fdf8ef;
+            --text: #3a2a1d;
+        }
 
-    :root{
-        --maroon:#7a1f2b;
-        --maroon-dark:#5c1620;
-        --gold:#c9a13b;
-        --gold-light:#f3e4bb;
-        --cream:#fdf8ef;
-        --text:#3a2a1d;
-    }
+        * {
+            box-sizing: border-box;
+        }
 
-    *{
-        box-sizing:border-box;
-    }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--cream), #f1e3c6);
+            color: var(--text);
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 40px 20px;
+        }
 
-    body{
-        font-family:'Segoe UI', Arial, sans-serif;
-        margin:0;
-        min-height:100vh;
-        background:linear-gradient(135deg,var(--cream),#f1e3c6);
-        color:var(--text);
-        display:flex;
-        align-items:flex-start;
-        justify-content:center;
-        padding:40px 20px;
-    }
+        .hidden {
+            display: none !important;
+        }
 
-    .hidden{
-        display:none !important;
-    }
+        .container {
+            width: 100%;
+            max-width: 760px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 12px 40px rgba(122, 31, 43, 0.18);
+            overflow: hidden;
+            border: 1px solid var(--gold-light);
+        }
 
-    .container{
-        width:100%;
-        max-width:760px;
-        background:#fff;
-        border-radius:16px;
-        box-shadow:0 12px 40px rgba(122,31,43,0.18);
-        overflow:hidden;
-        border:1px solid var(--gold-light);
-    }
+        .panel-header {
+            background: linear-gradient(120deg, var(--maroon), var(--maroon-dark));
+            padding: 28px 30px;
+            text-align: center;
+            position: relative;
+        }
 
-    .panel-header{
-        background:linear-gradient(120deg,var(--maroon),var(--maroon-dark));
-        padding:28px 30px;
-        text-align:center;
-        position:relative;
-    }
+        .back-link {
+            position: absolute;
+            top: 16px;
+            left: 18px;
+            color: var(--gold-light);
+            font-size: 13px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            opacity: 0.85;
+            transition: opacity .2s;
+            letter-spacing: 0.5px;
+        }
 
-    .back-link{
-        position:absolute;
-        top:16px;
-        left:18px;
-        color:var(--gold-light);
-        font-size:13px;
-        text-decoration:none;
-        display:flex;
-        align-items:center;
-        gap:6px;
-        opacity:0.85;
-        transition:opacity .2s;
-        letter-spacing:0.5px;
-    }
+        .back-link:hover {
+            opacity: 1;
+        }
 
-    .back-link:hover{
-        opacity:1;
-    }
+        .panel-header h1 {
+            margin: 0;
+            color: var(--gold-light);
+            font-size: 26px;
+            letter-spacing: 1px;
+        }
 
-    .panel-header h1{
-        margin:0;
-        color:var(--gold-light);
-        font-size:26px;
-        letter-spacing:1px;
-    }
+        .panel-header span {
+            color: #e8c98f;
+            font-size: 13px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
 
-    .panel-header span{
-        color:#e8c98f;
-        font-size:13px;
-        letter-spacing:2px;
-        text-transform:uppercase;
-    }
+        /* ── Admin notification bell ── */
+        .notif-bell-wrap {
+            position: absolute;
+            top: 14px;
+            right: 18px;
+        }
 
-    .panel-body{
-        padding:30px 34px 36px;
-    }
+        .notif-bell-btn {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            color: var(--gold-light);
+            transition: background .2s;
+        }
 
-    label{
-        font-size:13px;
-        font-weight:600;
-        color:var(--maroon-dark);
-        margin-bottom:-8px;
-    }
+        .notif-bell-btn:hover {
+            background: rgba(255, 255, 255, 0.22);
+        }
 
-    input,textarea,select{
-        width:100%;
-        padding:12px 14px;
-        border:1px solid #ddd0b3;
-        border-radius:8px;
-        font-size:15px;
-        background:#fffdf8;
-        transition:border-color .2s, box-shadow .2s;
-    }
+        .notif-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: #e6394c;
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            min-width: 18px;
+            height: 18px;
+            border-radius: 9px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            border: 2px solid var(--maroon);
+        }
 
-    input:focus,textarea:focus,select:focus{
-        outline:none;
-        border-color:var(--gold);
-        box-shadow:0 0 0 3px rgba(201,161,59,0.2);
-    }
+        .notif-badge.show {
+            display: flex;
+        }
 
-    textarea{
-        min-height:90px;
-        resize:vertical;
-    }
+        .notif-dropdown {
+            position: absolute;
+            top: 46px;
+            right: 0;
+            width: 340px;
+            max-width: 88vw;
+            max-height: 420px;
+            overflow-y: auto;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--gold-light);
+            text-align: left;
+            z-index: 50;
+            display: none;
+        }
 
-    button{
-        width:100%;
-        padding:13px;
-        background:var(--maroon);
-        color:#fff;
-        border:none;
-        border-radius:8px;
-        cursor:pointer;
-        font-size:15px;
-        font-weight:600;
-        letter-spacing:0.5px;
-        transition:background .2s, transform .1s;
-        margin-top:6px;
-    }
+        .notif-dropdown.open {
+            display: block;
+        }
 
-    button:hover{
-        background:var(--maroon-dark);
-    }
+        .notif-dropdown-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 14px;
+            border-bottom: 1px solid #f0e2e2;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--maroon);
+        }
 
-    button:active{
-        transform:scale(0.99);
-    }
+        .notif-dropdown-header button {
+            background: none;
+            border: none;
+            color: var(--maroon);
+            font-size: 12px;
+            cursor: pointer;
+            text-decoration: underline;
+            padding: 0;
+        }
 
-    .error-msg{
-        color:#b00020;
-        font-size:13px;
-        text-align:center;
-        min-height:18px;
-    }
+        .notif-item {
+            padding: 10px 14px;
+            border-bottom: 1px solid #f6efef;
+            cursor: pointer;
+            font-size: 13px;
+        }
 
-    /* ADMIN PANEL */
+        .notif-item:hover {
+            background: #fdf6f3;
+        }
 
-    .section-title{
-        color:var(--maroon-dark);
-        font-size:18px;
-        margin:30px 0 14px;
-        border-bottom:2px solid var(--gold-light);
-        padding-bottom:8px;
-    }
+        .notif-item.unread {
+            background: #fff7ec;
+        }
 
-    .form-grid{
-        display:grid;
-        grid-template-columns:1fr 1fr;
-        gap:14px;
-    }
+        .notif-item-title {
+            font-weight: 700;
+            color: var(--maroon-dark);
+            margin-bottom: 2px;
+        }
 
-    .form-grid .full{
-        grid-column:1 / -1;
-    }
+        .notif-item-msg {
+            color: #555;
+            font-size: 12.5px;
+        }
 
-    .image-preview{
-        width:100%;
-        max-height:160px;
-        object-fit:contain;
-        border:1px dashed var(--gold);
-        border-radius:8px;
-        padding:6px;
-        margin-top:6px;
-        display:none;
-        background:#fffdf8;
-    }
+        .notif-item-time {
+            color: #999;
+            font-size: 11px;
+            margin-top: 4px;
+        }
 
-    .toolbar{
-        display:flex;
-        justify-content:space-between;
-        align-items:center;
-        margin-top:24px;
-        gap:10px;
-    }
+        .notif-empty {
+            padding: 24px 14px;
+            text-align: center;
+            color: #999;
+            font-size: 13px;
+        }
 
-    .toolbar button.secondary{
-        background:transparent;
-        color:var(--maroon);
-        border:1px solid var(--maroon);
-        width:auto;
-        padding:8px 16px;
-        font-size:13px;
-    }
+        .panel-body {
+            padding: 30px 34px 36px;
+        }
 
-    .toolbar button.secondary:hover{
-        background:var(--maroon);
-        color:#fff;
-    }
+        label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--maroon-dark);
+            margin-bottom: -8px;
+        }
 
-    .empty-state{
-        text-align:center;
-        color:#a89a82;
-        padding:30px 0;
-        font-style:italic;
-    }
+        input,
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #ddd0b3;
+            border-radius: 8px;
+            font-size: 15px;
+            background: #fffdf8;
+            transition: border-color .2s, box-shadow .2s;
+        }
 
-    .product-list{
-        display:grid;
-        grid-template-columns:repeat(auto-fill,minmax(200px,1fr));
-        gap:18px;
-        margin-top:16px;
-    }
+        input:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--gold);
+            box-shadow: 0 0 0 3px rgba(201, 161, 59, 0.2);
+        }
 
-    .product{
-        border:1px solid var(--gold-light);
-        border-radius:12px;
-        background:#fffdf8;
-        overflow:hidden;
-        box-shadow:0 3px 10px rgba(0,0,0,0.06);
-        display:flex;
-        flex-direction:column;
-    }
+        textarea {
+            min-height: 90px;
+            resize: vertical;
+        }
 
-    .product img{
-        width:100%;
-        height:180px;
-        object-fit:cover;
-    }
+        button {
+            width: 100%;
+            padding: 13px;
+            background: var(--maroon);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            transition: background .2s, transform .1s;
+            margin-top: 6px;
+        }
 
-    .product .info{
-        padding:14px;
-        flex:1;
-        display:flex;
-        flex-direction:column;
-        gap:4px;
-    }
+        button:hover {
+            background: var(--maroon-dark);
+        }
 
-    .product h3{
-        margin:0 0 2px;
-        font-size:15px;
-        color:var(--maroon-dark);
-    }
+        button:active {
+            transform: scale(0.99);
+        }
 
-    .product .price{
-        color:var(--maroon);
-        font-weight:700;
-        font-size:15px;
-    }
+        .error-msg {
+            color: #b00020;
+            font-size: 13px;
+            text-align: center;
+            min-height: 18px;
+        }
 
-    .product .category{
-        display:inline-block;
-        background:var(--gold-light);
-        color:var(--maroon-dark);
-        font-size:11px;
-        padding:2px 8px;
-        border-radius:20px;
-        width:fit-content;
-    }
+        /* ADMIN PANEL */
 
-    .product .desc{
-        font-size:13px;
-        color:#6b5b46;
-        flex:1;
-    }
+        .section-title {
+            color: var(--maroon-dark);
+            font-size: 18px;
+            margin: 30px 0 14px;
+            border-bottom: 2px solid var(--gold-light);
+            padding-bottom: 8px;
+        }
 
-    .product .delete-btn{
-        margin:0;
-        border-radius:0;
-        background:#b00020;
-        font-size:13px;
-        padding:9px;
-    }
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
 
-    .product .delete-btn:hover{
-        background:#8a0017;
-    }
+        .form-grid .full {
+            grid-column: 1 / -1;
+        }
 
-    /* LOGIN */
-    #loginSection .panel-body{
-        display:flex;
-        flex-direction:column;
-        gap:14px;
-        max-width:360px;
-        margin:0 auto;
-    }
+        .image-preview {
+            width: 100%;
+            max-height: 160px;
+            object-fit: contain;
+            border: 1px dashed var(--gold);
+            border-radius: 8px;
+            padding: 6px;
+            margin-top: 6px;
+            display: none;
+            background: #fffdf8;
+        }
 
-    .login-icon{
-        font-size:40px;
-        text-align:center;
-        display:block;
-        margin-bottom:4px;
-        color:var(--gold-light);
-    }
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 24px;
+            gap: 10px;
+        }
 
-</style>
+        .toolbar button.secondary {
+            background: transparent;
+            color: var(--maroon);
+            border: 1px solid var(--maroon);
+            width: auto;
+            padding: 8px 16px;
+            font-size: 13px;
+        }
+
+        .toolbar button.secondary:hover {
+            background: var(--maroon);
+            color: #fff;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #a89a82;
+            padding: 30px 0;
+            font-style: italic;
+        }
+
+        .product-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 18px;
+            margin-top: 16px;
+        }
+
+        .product {
+            border: 1px solid var(--gold-light);
+            border-radius: 12px;
+            background: #fffdf8;
+            overflow: hidden;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.06);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .product img {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+        }
+
+        .product .info {
+            padding: 14px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .product h3 {
+            margin: 0 0 2px;
+            font-size: 15px;
+            color: var(--maroon-dark);
+        }
+
+        .product .price {
+            color: var(--maroon);
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .product .category {
+            display: inline-block;
+            background: var(--gold-light);
+            color: var(--maroon-dark);
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 20px;
+            width: fit-content;
+        }
+
+        .product .desc {
+            font-size: 13px;
+            color: #6b5b46;
+            flex: 1;
+        }
+
+        .product .delete-btn {
+            margin: 0;
+            border-radius: 0;
+            background: #b00020;
+            font-size: 13px;
+            padding: 9px;
+        }
+
+        .product .delete-btn:hover {
+            background: #8a0017;
+        }
+
+        .admin-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--gold-light);
+            padding-bottom: 10px;
+        }
+
+        .admin-tab-btn {
+            background: none;
+            border: none;
+            font-size: 15px;
+            font-weight: 600;
+            color: #6b5b46;
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: 20px;
+            transition: all 0.2s;
+        }
+
+        .admin-tab-btn.active {
+            background: var(--maroon);
+            color: var(--gold-light);
+        }
+
+        .message-item {
+            border: 1px solid var(--gold-light);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 15px;
+            background: #fffdf8;
+        }
+
+        .message-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+            color: var(--maroon);
+            font-weight: bold;
+        }
+
+        .message-item-body {
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+
+        /* ── Orders tab ── */
+        .orders-table-wrap {
+            overflow-x: auto;
+            margin-top: 16px;
+            border-radius: 12px;
+            border: 1px solid var(--gold-light);
+        }
+
+        .orders-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .orders-table th {
+            background: linear-gradient(120deg, var(--maroon), var(--maroon-dark));
+            color: var(--gold-light);
+            padding: 11px 14px;
+            text-align: left;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+
+        .orders-table th:first-child { border-radius: 12px 0 0 0; }
+        .orders-table th:last-child  { border-radius: 0 12px 0 0; }
+
+        .orders-table td {
+            padding: 10px 14px;
+            border-bottom: 1px solid #f0e9dc;
+            vertical-align: middle;
+        }
+
+        .orders-table tr:last-child td { border-bottom: none; }
+
+        .orders-table tr:hover td {
+            background: #fffbf4;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-placed    { background: #e8f0fe; color: #1a56db; }
+        .status-shipped   { background: #e3f9e5; color: #0e7a2f; }
+        .status-delivered { background: #d1fae5; color: #065f46; }
+        .status-cancelled { background: #fee2e2; color: #9b1c1c; }
+        .status-pending   { background: #fef3c7; color: #92400e; }
+        .status-paid      { background: #d1fae5; color: #065f46; }
+        .status-failed    { background: #fee2e2; color: #9b1c1c; }
+
+        .order-status-select {
+            padding: 5px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            border: 1px solid var(--gold);
+            background: #fffdf8;
+            cursor: pointer;
+            width: auto;
+        }
+
+        .order-items-preview {
+            font-size: 11.5px;
+            color: #7a6a55;
+            max-width: 180px;
+        }
+
+        /* ── Coupons tab ── */
+        .coupon-creator {
+            background: linear-gradient(135deg, #fff9f0, #fdf3e3);
+            border: 1px solid var(--gold-light);
+            border-radius: 14px;
+            padding: 22px 20px;
+            margin-bottom: 24px;
+        }
+
+        .coupon-creator-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--maroon-dark);
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .coupon-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .coupon-grid .full { grid-column: 1 / -1; }
+
+        .coupon-code-row {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+        }
+
+        .coupon-code-row input { flex: 1; }
+
+        .btn-gen-code {
+            width: auto !important;
+            padding: 12px 14px !important;
+            font-size: 13px !important;
+            white-space: nowrap;
+            background: var(--gold) !important;
+            color: var(--maroon-dark) !important;
+            font-weight: 700 !important;
+            flex-shrink: 0;
+        }
+
+        .btn-gen-code:hover { background: #b88d2a !important; color: #fff !important; }
+
+        .coupon-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 10px;
+        }
+
+        .coupon-card {
+            border: 1px solid var(--gold-light);
+            border-radius: 12px;
+            background: #fffdf8;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            position: relative;
+            transition: box-shadow .2s;
+        }
+
+        .coupon-card:hover { box-shadow: 0 4px 16px rgba(122,31,43,.1); }
+
+        .coupon-card-ticket {
+            background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+            color: var(--gold-light);
+            border-radius: 10px;
+            padding: 12px 16px;
+            font-size: 18px;
+            font-weight: 900;
+            letter-spacing: 2px;
+            min-width: 120px;
+            text-align: center;
+            text-transform: uppercase;
+            font-family: 'Courier New', monospace;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .coupon-card-ticket::before,
+        .coupon-card-ticket::after {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            background: var(--cream);
+            border-radius: 50%;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .coupon-card-ticket::before { left: -7px; }
+        .coupon-card-ticket::after  { right: -7px; }
+
+        .coupon-card-details { flex: 1; min-width: 0; }
+
+        .coupon-card-details h4 {
+            margin: 0 0 4px;
+            font-size: 14px;
+            color: var(--maroon-dark);
+        }
+
+        .coupon-card-details p {
+            margin: 0;
+            font-size: 12px;
+            color: #7a6a55;
+            line-height: 1.5;
+        }
+
+        .coupon-card-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-end;
+            flex-shrink: 0;
+        }
+
+        .btn-coupon-toggle {
+            width: auto !important;
+            padding: 5px 12px !important;
+            font-size: 12px !important;
+            margin: 0 !important;
+        }
+
+        .btn-coupon-toggle.active {
+            background: #0e7a2f !important;
+        }
+
+        .btn-coupon-toggle.inactive {
+            background: #92400e !important;
+        }
+
+        .btn-coupon-delete {
+            width: auto !important;
+            padding: 5px 12px !important;
+            font-size: 12px !important;
+            margin: 0 !important;
+            background: #b00020 !important;
+        }
+
+        .coupon-used-count {
+            font-size: 11px;
+            color: #999;
+        }
+
+        .coupon-inactive-overlay {
+            opacity: 0.55;
+        }
+
+        /* ── Stat cards (orders summary) ── */
+        .order-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .order-stat-card {
+            background: linear-gradient(135deg, #fff9f0, #fdf3e3);
+            border: 1px solid var(--gold-light);
+            border-radius: 12px;
+            padding: 14px 16px;
+            text-align: center;
+        }
+
+        .order-stat-card .stat-number {
+            font-size: 24px;
+            font-weight: 800;
+            color: var(--maroon);
+        }
+
+        .order-stat-card .stat-label {
+            font-size: 11px;
+            color: #7a6a55;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        /* LOGIN */
+        /* ── Login page (redesigned) ── */
+        .login-outer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 80px);
+            width: 100%;
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+            background: #fff;
+            border-radius: 20px;
+            box-shadow: 0 16px 48px rgba(122, 31, 43, 0.2);
+            border: 1px solid var(--gold-light);
+            overflow: hidden;
+            animation: loginCardIn .35s ease-out;
+        }
+
+        @keyframes loginCardIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .login-card-header {
+            background: linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+            padding: 36px 30px 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .login-icon-badge {
+            width: 56px;
+            height: 56px;
+            margin: 0 auto 14px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(243, 228, 187, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+        }
+
+        .login-card-header h1 {
+            margin: 0;
+            color: var(--gold-light);
+            font-size: 24px;
+            letter-spacing: 0.5px;
+        }
+
+        .login-subtitle {
+            margin: 6px 0 0;
+            color: #e8c98f;
+            font-size: 13px;
+            letter-spacing: 0.3px;
+        }
+
+        .login-card-body {
+            padding: 30px 30px 34px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .login-field label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--maroon-dark);
+            margin-bottom: 7px;
+        }
+
+        .input-with-icon {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-with-icon .input-icon {
+            position: absolute;
+            left: 13px;
+            font-size: 15px;
+            opacity: 0.55;
+            pointer-events: none;
+        }
+
+        .input-with-icon input {
+            padding-left: 38px;
+        }
+
+        .toggle-password {
+            position: absolute;
+            right: 6px;
+            width: 32px;
+            height: 32px;
+            background: transparent;
+            border: none;
+            color: #8a7a63;
+            font-size: 15px;
+            cursor: pointer;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: background .15s, color .15s;
+        }
+
+        .toggle-password:hover {
+            background: #f5eee0;
+            color: var(--maroon);
+        }
+
+        .login-card-body input {
+            padding-top: 12px;
+            padding-bottom: 12px;
+        }
+
+        .input-with-icon-field {
+            padding-right: 40px;
+        }
+
+        .login-alert {
+            display: none;
+            align-items: flex-start;
+            gap: 8px;
+            background: #fdecec;
+            border: 1px solid #f3c6c6;
+            color: #b00020;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .login-alert.show {
+            display: flex;
+        }
+
+        .login-alert .alert-icon {
+            flex-shrink: 0;
+            margin-top: 1px;
+        }
+
+        .login-submit-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .login-submit-btn:disabled {
+            opacity: 0.75;
+            cursor: not-allowed;
+        }
+
+        .btn-spinner {
+            width: 15px;
+            height: 15px;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-top-color: #fff;
+            border-radius: 50%;
+            display: none;
+            animation: spin .7s linear infinite;
+        }
+
+        .btn-spinner.show {
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .login-back-link {
+            display: block;
+            text-align: center;
+            margin-top: 6px;
+            font-size: 13px;
+            color: #8a7a63;
+            text-decoration: none;
+        }
+
+        .login-back-link:hover {
+            color: var(--maroon);
+            text-decoration: underline;
+        }
+    </style>
 
 </head>
+
 <body>
 
-<div id="appWrapper">
+    <div id="appWrapper">
 
-    <!-- LOGIN SECTION -->
-    <div id="loginSection" class="container">
-        <div class="panel-header">
-            <a href="saree.html" class="back-link">&#8592; Main Site</a>
-            <span class="login-icon">&#128274;</span>
-            <h1>Shri Jeevani</h1>
-            <span>Admin Login</span>
+        <!-- LOGIN SECTION -->
+        <div id="loginSection" class="login-outer">
+            <div class="login-card">
+                <div class="login-card-header">
+                    <div class="login-icon-badge">&#128274;</div>
+                    <h1>Shri Jeewani Saree Center</h1>
+                    <p class="login-subtitle">Sign in to manage your store</p>
+                </div>
+                <div class="login-card-body">
+
+                    <div class="login-field">
+                        <label for="username">Username</label>
+                        <div class="input-with-icon">
+                            <span class="input-icon">&#128100;</span>
+                            <input type="text" id="username" placeholder="Enter username" autocomplete="username">
+                        </div>
+                    </div>
+
+                    <div class="login-field">
+                        <label for="password">Password</label>
+                        <div class="input-with-icon">
+                            <span class="input-icon">&#128274;</span>
+                            <input type="password" id="password" class="input-with-icon-field"
+                                placeholder="Enter password" autocomplete="current-password">
+                            <button type="button" class="toggle-password" id="togglePasswordBtn"
+                                onclick="togglePasswordVisibility()" aria-label="Show password">&#128065;</button>
+                        </div>
+                    </div>
+
+                    <div class="login-alert" id="loginError">
+                        <span class="alert-icon">&#9888;</span>
+                        <span id="loginErrorText"></span>
+                    </div>
+
+                    <button class="login-submit-btn" id="loginBtn" onclick="login()">
+                        <span class="btn-spinner" id="loginSpinner"></span>
+                        <span id="loginBtnText">Login</span>
+                    </button>
+
+                    <a href="saree.html" class="login-back-link">&#8592; Back to Main Site</a>
+                </div>
+            </div>
         </div>
-        <div class="panel-body">
-            <label for="username">Username</label>
-            <input type="text" id="username" placeholder="Enter username" autocomplete="off">
 
-            <label for="password">Password</label>
-            <input type="password" id="password" placeholder="Enter password" autocomplete="off">
+        <!-- ADMIN PANEL (hidden until correct login) -->
+        <div id="adminPanel" class="container hidden">
+            <div class="panel-header">
+                <a href="saree.html" class="back-link">&#8592; Main Site (F9)</a>
+                <h1>Shri Jeewani Saree Center</h1>
+                <span>Admin Panel</span>
 
-            <div class="error-msg" id="loginError"></div>
-
-            <button onclick="login()">Login</button>
-        </div>
-    </div>
-
-    <!-- ADMIN PANEL (hidden until correct login) -->
-    <div id="adminPanel" class="container hidden">
-        <div class="panel-header">
-            <a href="saree.html" class="back-link">&#8592; Main Site (F9)</a>
-            <h1>Shri Jeevani</h1>
-            <span>Admin Panel</span>
-        </div>
-        <div class="panel-body">
-
-            <div class="form-grid">
-
-                <div class="full">
-                    <label for="name">Product Name</label>
-                    <input type="text" id="name" placeholder="e.g. Banarasi Silk Saree">
+                <div class="notif-bell-wrap">
+                    <button class="notif-bell-btn" onclick="toggleNotifDropdown()" title="Notifications">
+                        &#128276;
+                        <span class="notif-badge" id="notifBadge">0</span>
+                    </button>
+                    <div class="notif-dropdown" id="notifDropdown">
+                        <div class="notif-dropdown-header">
+                            <span>Notifications</span>
+                            <button onclick="markAllNotificationsRead()">Mark all read</button>
+                        </div>
+                        <div id="notifList">
+                            <div class="notif-empty">Loading…</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="admin-tabs">
+                    <button class="admin-tab-btn active" id="btnTabProducts"
+                        onclick="switchAdminTab('products')">🛍️ Products</button>
+                    <button class="admin-tab-btn" id="btnTabOrders"
+                        onclick="switchAdminTab('orders')">📦 Orders</button>
+                    <button class="admin-tab-btn" id="btnTabCoupons"
+                        onclick="switchAdminTab('coupons')">🏷️ Coupons</button>
+                    <button class="admin-tab-btn" id="btnTabMessages"
+                        onclick="switchAdminTab('messages')">✉️ Messages</button>
                 </div>
 
-                <div>
-                    <label for="price">Price (₹)</label>
-                    <input type="number" id="price" placeholder="e.g. 4999" min="0">
+                <div id="tabProducts">
+                    <div class="form-grid">
+
+                        <div class="full">
+                            <label for="name">Product Name</label>
+                            <input type="text" id="name" placeholder="e.g. Banarasi Silk Saree">
+                        </div>
+
+                        <div>
+                            <label for="price">Price (₹)</label>
+                            <input type="number" id="price" placeholder="e.g. 4999" min="0">
+                        </div>
+
+                        <div>
+                            <label for="category">Category</label>
+                            <select id="category">
+                                <option>Bridal</option>
+                                <option>Festive</option>
+                                <option>Classic</option>
+                                <option>Contemporary</option>
+                                <option>Suit</option>
+                            </select>
+                        </div>
+
+                        <div class="full">
+                            <label for="description">Description</label>
+                            <textarea id="description" placeholder="Product description"></textarea>
+                        </div>
+
+                        <div class="full">
+                            <label for="image">Product Image</label>
+                            <input type="file" id="image" accept="image/*" onchange="previewImage()">
+                            <img id="imagePreview" class="image-preview">
+                        </div>
+
+                    </div>
+
+                    <div class="error-msg" id="formError"></div>
+
+                    <button onclick="addProduct()">Add Product</button>
+
+                    <div class="toolbar">
+                        <h2 class="section-title" style="margin:0;border:none;padding:0;">Added Products</h2>
+                        <div style="display:flex;gap:8px;">
+                            <button class="secondary" onclick="window.location.href='saree.html'">&#8592; View Site
+                                (F9)</button>
+                            <button class="secondary" onclick="logout()">Logout</button>
+                        </div>
+                    </div>
+
+                    <div id="productList"></div>
                 </div>
 
-                <div>
-                    <label for="category">Category</label>
-                    <select id="category">
-                        <option>Bridal</option>
-                        <option>Festive</option>
-                        <option>Classic</option>
-                        <option>Contemporary</option>
-                        <option>Suit</option>
-                    </select>
+                <!-- ORDERS TAB -->
+                <div id="tabOrders" class="hidden">
+                    <div class="toolbar">
+                        <h2 class="section-title" style="margin:0;border:none;padding:0;">📦 Recent Orders</h2>
+                        <button class="secondary" onclick="loadOrders()">🔄 Refresh</button>
+                    </div>
+                    <div id="orderStats" class="order-stats" style="margin-top:16px;"></div>
+                    <div id="orderList">
+                        <div class="empty-state">Loading orders...</div>
+                    </div>
                 </div>
 
-                <div class="full">
-                    <label for="description">Description</label>
-                    <textarea id="description" placeholder="Product description"></textarea>
+                <!-- COUPONS TAB -->
+                <div id="tabCoupons" class="hidden">
+                    <h2 class="section-title">🏷️ Create Discount Coupon</h2>
+
+                    <div class="coupon-creator">
+                        <div class="coupon-creator-title">✨ New Coupon</div>
+                        <div class="coupon-grid">
+                            <div class="full">
+                                <label for="couponCode">Coupon Code</label>
+                                <div class="coupon-code-row">
+                                    <input type="text" id="couponCode" placeholder="e.g. DIWALI25" style="text-transform:uppercase;">
+                                    <button class="btn-gen-code" onclick="generateCouponCode()" type="button">⚡ Auto-Generate</button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label for="couponType">Discount Type</label>
+                                <select id="couponType" onchange="updateCouponTypeHint()">
+                                    <option value="percent">Percentage (%) off</option>
+                                    <option value="flat">Flat (₹) off</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label for="couponValue" id="couponValueLabel">Discount Value (%)</label>
+                                <input type="number" id="couponValue" placeholder="e.g. 15" min="1">
+                            </div>
+
+                            <div>
+                                <label for="couponMinOrder">Min. Order Amount (₹)</label>
+                                <input type="number" id="couponMinOrder" placeholder="e.g. 999 (leave 0 for none)" min="0" value="0">
+                            </div>
+
+                            <div>
+                                <label for="couponMaxUses">Max Uses (leave blank = unlimited)</label>
+                                <input type="number" id="couponMaxUses" placeholder="e.g. 100" min="1">
+                            </div>
+
+                            <div>
+                                <label for="couponExpiry">Expiry Date (optional)</label>
+                                <input type="datetime-local" id="couponExpiry">
+                            </div>
+
+                            <div>
+                                <label for="couponActive">Status</label>
+                                <select id="couponActive">
+                                    <option value="1">✅ Active</option>
+                                    <option value="0">⏸️ Inactive</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="error-msg" id="couponError" style="margin-top:10px;"></div>
+                        <button onclick="createCoupon()" style="margin-top:14px;">🎟️ Create Coupon</button>
+                    </div>
+
+                    <div class="toolbar">
+                        <h2 class="section-title" style="margin:0;border:none;padding:0;">All Coupons</h2>
+                        <button class="secondary" onclick="loadCoupons()">🔄 Refresh</button>
+                    </div>
+                    <div id="couponList" style="margin-top:14px;">
+                        <div class="empty-state">Loading coupons...</div>
+                    </div>
                 </div>
 
-                <div class="full">
-                    <label for="image">Product Image</label>
-                    <input type="file" id="image" accept="image/*" onchange="previewImage()">
-                    <img id="imagePreview" class="image-preview">
+                <!-- MESSAGES TAB -->
+                <div id="tabMessages" class="hidden">
+                    <div class="toolbar">
+                        <h2 class="section-title" style="margin:0;border:none;padding:0;">✉️ Contact Messages</h2>
+                        <button class="secondary" onclick="loadContactMessages()">🔄 Refresh</button>
+                    </div>
+                    <div id="messageList">
+                        <div class="empty-state">Loading messages...</div>
+                    </div>
                 </div>
 
             </div>
-
-            <div class="error-msg" id="formError"></div>
-
-            <button onclick="addProduct()">Add Product</button>
-
-            <div class="toolbar">
-                <h2 class="section-title" style="margin:0;border:none;padding:0;">Added Products</h2>
-                <div style="display:flex;gap:8px;">
-                    <button class="secondary" onclick="window.location.href='saree.html'">&#8592; View Site (F9)</button>
-                    <button class="secondary" onclick="logout()">Logout</button>
-                </div>
-            </div>
-
-            <div id="productList"></div>
-
         </div>
+
     </div>
 
-</div>
+    <script>
 
-<script>
+        // ─────────────────────────────────────────────────────────────────
+        // CHANGE (Phase 1 backend integration): admin login and product
+        // management now talk to the Flask API (/api/admin/...) backed by
+        // SQLite, with a hashed password and a real server-side session,
+        // instead of a hardcoded plaintext password and localStorage.
+        // All markup/CSS/IDs are unchanged.
+        // ─────────────────────────────────────────────────────────────────
 
-    // ─────────────────────────────────────────────────────────────────
-    // CHANGE (Phase 1 backend integration): admin login and product
-    // management now talk to the Flask API (/api/admin/...) backed by
-    // SQLite, with a hashed password and a real server-side session,
-    // instead of a hardcoded plaintext password and localStorage.
-    // All markup/CSS/IDs are unchanged.
-    // ─────────────────────────────────────────────────────────────────
+        let currentProducts = []; // cache of admin product list for delete-by-id lookups
 
-    let currentProducts = []; // cache of admin product list for delete-by-id lookups
-
-    async function apiFetch(url, options = {}){
-        const res = await fetch(url, {
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            ...options,
-        });
-        let data = null;
-        try { data = await res.json(); } catch(e) { /* no JSON body */ }
-        if(!res.ok){
-            const message = (data && data.error) ? data.error : `Request failed (${res.status})`;
-            throw new Error(message);
-        }
-        return data;
-    }
-
-    // ---------- F9 SHORTCUT: redirect back to main site ----------
-    document.addEventListener("keydown", function(e){
-        if(e.key === "F9"){
-            e.preventDefault();
-            window.location.href = "saree.html";
-        }
-    });
-
-    // ---------- LOGIN ----------
-
-    async function login(){
-
-        let username = document.getElementById("username").value.trim();
-        let password = document.getElementById("password").value;
-        let errorBox = document.getElementById("loginError");
-
-        errorBox.textContent = "";
-
-        if(!username || !password){
-            errorBox.textContent = "Please enter both username and password.";
-            return;
-        }
-
-        try {
-            await apiFetch('/api/admin/login', {
-                method: 'POST',
-                body: JSON.stringify({ username, password })
+        async function apiFetch(url, options = {}) {
+            const res = await fetch(url, {
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                ...options,
             });
-            showAdminPanel();
-        } catch(err){
-            errorBox.textContent = err.message || "Incorrect username or password.";
+            let data = null;
+            try { data = await res.json(); } catch (e) { /* no JSON body */ }
+            if (!res.ok) {
+                const message = (data && data.error) ? data.error : `Request failed (${res.status})`;
+                throw new Error(message);
+            }
+            return data;
         }
 
-    }
-
-    function showAdminPanel(){
-        document.getElementById("loginSection").classList.add("hidden");
-        document.getElementById("adminPanel").classList.remove("hidden");
-        document.getElementById("username").value = "";
-        document.getElementById("password").value = "";
-        displayProducts();
-    }
-
-    async function logout(){
-        try { await apiFetch('/api/admin/logout', { method: 'POST' }); } catch(e) { /* ignore */ }
-        document.getElementById("adminPanel").classList.add("hidden");
-        document.getElementById("loginSection").classList.remove("hidden");
-    }
-
-    // Allow pressing Enter in the password field to submit
-    document.addEventListener("DOMContentLoaded", async function(){
-        document.getElementById("password").addEventListener("keydown", function(e){
-            if(e.key === "Enter") login();
+        // ---------- F9 SHORTCUT: redirect back to main site ----------
+        document.addEventListener("keydown", function (e) {
+            if (e.key === "F9") {
+                e.preventDefault();
+                window.location.href = "saree.html";
+            }
         });
 
-        // If there's already a valid server-side admin session, skip the login form
-        try {
-            const sessionInfo = await apiFetch('/api/admin/session');
-            if(sessionInfo.loggedIn){
-                showAdminPanel();
+        // ---------- LOGIN ----------
+
+        function showLoginError(message) {
+            document.getElementById("loginErrorText").textContent = message;
+            document.getElementById("loginError").classList.add("show");
+        }
+
+        function clearLoginError() {
+            document.getElementById("loginErrorText").textContent = "";
+            document.getElementById("loginError").classList.remove("show");
+        }
+
+        function togglePasswordVisibility() {
+            const input = document.getElementById("password");
+            const btn = document.getElementById("togglePasswordBtn");
+            const nowVisible = input.type === "password";
+            input.type = nowVisible ? "text" : "password";
+            btn.innerHTML = nowVisible ? "&#128584;" : "&#128065;";
+            btn.setAttribute("aria-label", nowVisible ? "Hide password" : "Show password");
+        }
+
+        async function login() {
+
+            let username = document.getElementById("username").value.trim();
+            let password = document.getElementById("password").value;
+            let loginBtn = document.getElementById("loginBtn");
+            let spinner = document.getElementById("loginSpinner");
+            let btnText = document.getElementById("loginBtnText");
+
+            clearLoginError();
+
+            if (!username || !password) {
+                showLoginError("Please enter both username and password.");
+                return;
             }
-        } catch(e) { /* not logged in — stay on login form */ }
-    });
 
-    // ---------- IMAGE PREVIEW ----------
-
-    function previewImage(){
-
-        let imageInput = document.getElementById("image");
-        let preview = document.getElementById("imagePreview");
-
-        if(imageInput.files.length === 0){
-            preview.style.display = "none";
-            return;
-        }
-
-        let reader = new FileReader();
-
-        reader.onload = function(){
-            preview.src = reader.result;
-            preview.style.display = "block";
-        };
-
-        reader.readAsDataURL(imageInput.files[0]);
-
-    }
-
-    // ---------- ADD PRODUCT ----------
-
-    function addProduct(){
-
-        let name = document.getElementById("name").value.trim();
-        let price = document.getElementById("price").value;
-        let category = document.getElementById("category").value;
-        let description = document.getElementById("description").value.trim();
-        let imageInput = document.getElementById("image");
-        let errorBox = document.getElementById("formError");
-
-        errorBox.textContent = "";
-
-        if(!name){
-            errorBox.textContent = "Please enter a product name.";
-            return;
-        }
-
-        if(price === "" || isNaN(price) || Number(price) < 0){
-            errorBox.textContent = "Please enter a valid price.";
-            return;
-        }
-
-        if(imageInput.files.length === 0){
-            errorBox.textContent = "Please upload an image.";
-            return;
-        }
-
-        if(imageInput.files[0].size > 5 * 1024 * 1024){
-            errorBox.textContent = "Image is too large. Please choose a file under 5 MB.";
-            return;
-        }
-
-        let reader = new FileReader();
-
-        reader.onload = async function(){
-
-            const categoryLower = category.toLowerCase();
-            // The product API validates against bridal/festive/classic/contemporary.
-            // "Suit" (a legacy option in this form) maps to "classic" so the save
-            // never silently fails for that one dropdown option.
-            const apiCategory = ['bridal','festive','classic','contemporary'].includes(categoryLower)
-                ? categoryLower
-                : 'classic';
+            loginBtn.disabled = true;
+            spinner.classList.add("show");
+            btnText.textContent = "Signing in…";
 
             try {
-                await apiFetch('/api/admin/products', {
+                await apiFetch('/api/admin/login', {
                     method: 'POST',
-                    body: JSON.stringify({
-                        name: name,
-                        price: Number(price),
-                        category: apiCategory,
-                        description: description,
-                        imageData: reader.result
-                    })
+                    body: JSON.stringify({ username, password })
                 });
-            } catch(err){
-                errorBox.textContent = err.message || "Failed to add product.";
+                showAdminPanel();
+            } catch (err) {
+                showLoginError(err.message || "Incorrect username or password.");
+                document.getElementById("password").focus();
+                document.getElementById("password").select();
+            } finally {
+                loginBtn.disabled = false;
+                spinner.classList.remove("show");
+                btnText.textContent = "Login";
+            }
+
+        }
+
+        function showAdminPanel() {
+            document.getElementById("loginSection").classList.add("hidden");
+            document.getElementById("adminPanel").classList.remove("hidden");
+            document.getElementById("username").value = "";
+            document.getElementById("password").value = "";
+            clearLoginError();
+            displayProducts();
+            startNotificationPolling();
+        }
+
+        async function logout() {
+            try { await apiFetch('/api/admin/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+            document.getElementById("adminPanel").classList.add("hidden");
+            document.getElementById("loginSection").classList.remove("hidden");
+            stopNotificationPolling();
+            setTimeout(() => document.getElementById("username").focus(), 0);
+        }
+
+        // ---------- NOTIFICATIONS (customer logins, signups, etc.) ----------
+        // Bell icon in the admin header. Polls /api/admin/notifications every
+        // 15s while the admin panel is open, and shows the unread count as a
+        // badge. Backed by database.create_notification() — currently fired on
+        // every customer login (see app.py auth_login()).
+
+        let notifPollTimer = null;
+
+        function startNotificationPolling() {
+            refreshNotifications();
+            stopNotificationPolling(); // avoid stacking timers if called twice
+            notifPollTimer = setInterval(refreshNotifications, 15000);
+        }
+
+        function stopNotificationPolling() {
+            if (notifPollTimer) {
+                clearInterval(notifPollTimer);
+                notifPollTimer = null;
+            }
+        }
+
+        async function refreshNotifications() {
+            try {
+                const data = await apiFetch('/api/admin/notifications?limit=30');
+                renderNotifications(data.notifications, data.unreadCount);
+            } catch (e) {
+                // Session may have expired; fail silently, next poll will retry.
+            }
+        }
+
+        function renderNotifications(notifications, unreadCount) {
+            const badge = document.getElementById("notifBadge");
+            if (unreadCount > 0) {
+                badge.textContent = unreadCount > 99 ? "99+" : unreadCount;
+                badge.classList.add("show");
+            } else {
+                badge.classList.remove("show");
+            }
+
+            const list = document.getElementById("notifList");
+            if (!notifications || notifications.length === 0) {
+                list.innerHTML = `<div class="notif-empty">No notifications yet.</div>`;
+                return;
+            }
+
+            list.innerHTML = notifications.map(n => {
+                const time = new Date(n.createdAt).toLocaleString('en-IN', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
+                });
+                return `
+                <div class="notif-item ${n.isRead ? '' : 'unread'}" onclick="onNotificationClick(${n.id}, ${!n.isRead})">
+                    <div class="notif-item-title">${escapeHtmlAdmin(n.title)}</div>
+                    <div class="notif-item-msg">${escapeHtmlAdmin(n.message)}</div>
+                    <div class="notif-item-time">${time}</div>
+                </div>
+            `;
+            }).join("");
+        }
+
+        function escapeHtmlAdmin(str) {
+            const div = document.createElement("div");
+            div.textContent = str == null ? "" : String(str);
+            return div.innerHTML;
+        }
+
+        function toggleNotifDropdown() {
+            const dropdown = document.getElementById("notifDropdown");
+            const opening = !dropdown.classList.contains("open");
+            dropdown.classList.toggle("open");
+            if (opening) refreshNotifications();
+        }
+
+        async function onNotificationClick(id, wasUnread) {
+            if (wasUnread) {
+                try { await apiFetch(`/api/admin/notifications/${id}/read`, { method: 'POST' }); } catch (e) { }
+                refreshNotifications();
+            }
+        }
+
+        async function markAllNotificationsRead() {
+            try { await apiFetch('/api/admin/notifications/read-all', { method: 'POST' }); } catch (e) { }
+            refreshNotifications();
+        }
+
+        // Close the dropdown when clicking outside it
+        document.addEventListener("click", function (e) {
+            const wrap = document.querySelector(".notif-bell-wrap");
+            if (wrap && !wrap.contains(e.target)) {
+                document.getElementById("notifDropdown").classList.remove("open");
+            }
+        });
+
+        // Allow pressing Enter in either field to submit
+        document.addEventListener("DOMContentLoaded", async function () {
+            document.getElementById("username").addEventListener("keydown", function (e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    document.getElementById("password").focus();
+                }
+            });
+            document.getElementById("password").addEventListener("keydown", function (e) {
+                if (e.key === "Enter") login();
+            });
+
+            // If there's already a valid server-side admin session, skip the login form
+            try {
+                const sessionInfo = await apiFetch('/api/admin/session');
+                if (sessionInfo.loggedIn) {
+                    showAdminPanel();
+                    return;
+                }
+            } catch (e) { /* not logged in — stay on login form */ }
+
+            // Autofocus the username field so admins can start typing immediately
+            document.getElementById("username").focus();
+        });
+
+        // ---------- IMAGE PREVIEW ----------
+
+        function previewImage() {
+
+            let imageInput = document.getElementById("image");
+            let preview = document.getElementById("imagePreview");
+
+            if (imageInput.files.length === 0) {
+                preview.style.display = "none";
+                return;
+            }
+
+            let reader = new FileReader();
+
+            reader.onload = function () {
+                preview.src = reader.result;
+                preview.style.display = "block";
+            };
+
+            reader.readAsDataURL(imageInput.files[0]);
+
+        }
+
+        // ---------- ADD PRODUCT ----------
+
+        function addProduct() {
+
+            let name = document.getElementById("name").value.trim();
+            let price = document.getElementById("price").value;
+            let category = document.getElementById("category").value;
+            let description = document.getElementById("description").value.trim();
+            let imageInput = document.getElementById("image");
+            let errorBox = document.getElementById("formError");
+
+            errorBox.textContent = "";
+
+            if (!name) {
+                errorBox.textContent = "Please enter a product name.";
+                return;
+            }
+
+            if (price === "" || isNaN(price) || Number(price) < 0) {
+                errorBox.textContent = "Please enter a valid price.";
+                return;
+            }
+
+            if (imageInput.files.length === 0) {
+                errorBox.textContent = "Please upload an image.";
+                return;
+            }
+
+            if (imageInput.files[0].size > 5 * 1024 * 1024) {
+                errorBox.textContent = "Image is too large. Please choose a file under 5 MB.";
+                return;
+            }
+
+            let reader = new FileReader();
+
+            reader.onload = async function () {
+
+                const categoryLower = category.toLowerCase();
+                // The product API validates against bridal/festive/classic/contemporary.
+                // "Suit" (a legacy option in this form) maps to "classic" so the save
+                // never silently fails for that one dropdown option.
+                const apiCategory = ['bridal', 'festive', 'classic', 'contemporary'].includes(categoryLower)
+                    ? categoryLower
+                    : 'classic';
+
+                try {
+                    await apiFetch('/api/admin/products', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            name: name,
+                            price: Number(price),
+                            category: apiCategory,
+                            description: description,
+                            imageData: reader.result
+                        })
+                    });
+                } catch (err) {
+                    errorBox.textContent = err.message || "Failed to add product.";
+                    return;
+                }
+
+                await displayProducts();
+                resetForm();
+
+                // Ask if they want to go back to the main site
+                if (confirm("Product added successfully! ✅\n\nGo back to the main site to see it in the collection?")) {
+                    window.location.href = "saree.html#collections";
+                }
+
+            };
+
+            reader.readAsDataURL(imageInput.files[0]);
+
+        }
+
+        function resetForm() {
+            document.getElementById("name").value = "";
+            document.getElementById("price").value = "";
+            document.getElementById("category").selectedIndex = 0;
+            document.getElementById("description").value = "";
+            document.getElementById("image").value = "";
+            document.getElementById("imagePreview").style.display = "none";
+        }
+
+        // ---------- DELETE PRODUCT ----------
+
+        async function deleteProduct(productId) {
+
+            if (!confirm("Delete this product?")) return;
+
+            try {
+                await apiFetch(`/api/admin/products/${productId}`, { method: 'DELETE' });
+            } catch (err) {
+                alert("Failed to delete product: " + err.message);
                 return;
             }
 
             await displayProducts();
-            resetForm();
 
-            // Ask if they want to go back to the main site
-            if(confirm("Product added successfully! ✅\n\nGo back to the main site to see it in the collection?")){
-                window.location.href = "saree.html#collections";
-            }
-
-        };
-
-        reader.readAsDataURL(imageInput.files[0]);
-
-    }
-
-    function resetForm(){
-        document.getElementById("name").value = "";
-        document.getElementById("price").value = "";
-        document.getElementById("category").selectedIndex = 0;
-        document.getElementById("description").value = "";
-        document.getElementById("image").value = "";
-        document.getElementById("imagePreview").style.display = "none";
-    }
-
-    // ---------- DELETE PRODUCT ----------
-
-    async function deleteProduct(productId){
-
-        if(!confirm("Delete this product?")) return;
-
-        try {
-            await apiFetch(`/api/admin/products/${productId}`, { method: 'DELETE' });
-        } catch(err){
-            alert("Failed to delete product: " + err.message);
-            return;
         }
 
-        await displayProducts();
+        async function displayProducts() {
+            const listEl = document.getElementById("productList");
+            listEl.innerHTML = `<p class="empty-state">Loading products...</p>`;
+            try {
+                currentProducts = await apiFetch("/api/products");
 
-    }
+                if (currentProducts.length === 0) {
+                    listEl.innerHTML = `<p class="empty-state">No products added yet.</p>`;
+                    return;
+                }
 
-    // ---------- DISPLAY PRODUCTS ----------
-
-    function escapeHtml(str){
-        return String(str)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;");
-    }
-
-    async function displayProducts(){
-
-        let listEl = document.getElementById("productList");
-
-        try {
-            currentProducts = await apiFetch('/api/admin/products');
-        } catch(err){
-            listEl.innerHTML = `<p class="empty-state">Failed to load products: ${escapeHtml(err.message)}</p>`;
-            return;
-        }
-
-        if(currentProducts.length === 0){
-            listEl.innerHTML = '<p class="empty-state">No products added yet.</p>';
-            return;
-        }
-
-        let html = '<div class="product-list">';
-
-        currentProducts.forEach((product) => {
-
-            const imgSrc = product.imageData || '';
-            const imgTag = imgSrc
-                ? `<img src="${imgSrc}" alt="${escapeHtml(product.name)}">`
-                : `<div style="width:100%;height:180px;display:flex;align-items:center;justify-content:center;font-size:3rem;background:var(--gold-light);">${product.emoji || '🌸'}</div>`;
-
-            html += `
-            <div class="product">
-                ${imgTag}
-                <div class="info">
-                    <span class="category">${escapeHtml(product.category)}</span>
-                    <h3>${escapeHtml(product.name)}</h3>
-                    <div class="price">₹${Number(product.price).toLocaleString('en-IN')}</div>
-                    <div class="desc">${escapeHtml(product.description)}</div>
+                listEl.innerHTML = `
+                <div class="product-list">
+                    ${currentProducts.map(p => `
+                        <div class="product">
+                            <img src="${escapeHtml(p.imageUrl || '')}" alt="${escapeHtml(p.name)}">
+                            <div class="info">
+                                <h3>${escapeHtml(p.name)}</h3>
+                                <div class="price">₹${p.price}</div>
+                                <div class="category">${escapeHtml(p.category)}</div>
+                                <div class="desc">${escapeHtml(p.description)}</div>
+                            </div>
+                            <button class="delete-btn" onclick="deleteProduct(${p.id})">Delete</button>
+                        </div>
+                    `).join('')}
                 </div>
-                <button class="delete-btn" onclick="deleteProduct(${product.id})">Delete</button>
-            </div>
             `;
+            } catch (err) {
+                listEl.innerHTML = `<p class="empty-state">Failed to load products: ${escapeHtml(err.message)}</p>`;
+            }
+        }
 
-        });
+        const ADMIN_TABS = ['products', 'orders', 'coupons', 'messages'];
 
-        html += '</div>';
+        function switchAdminTab(tab) {
+            ADMIN_TABS.forEach(t => {
+                const el = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+                const btn = document.getElementById('btnTab' + t.charAt(0).toUpperCase() + t.slice(1));
+                if (el) el.classList.toggle('hidden', t !== tab);
+                if (btn) btn.classList.toggle('active', t === tab);
+            });
+            if (tab === 'messages') loadContactMessages();
+            if (tab === 'orders')   loadOrders();
+            if (tab === 'coupons')  loadCoupons();
+        }
 
-        listEl.innerHTML = html;
+        async function loadContactMessages() {
+            const listEl = document.getElementById("messageList");
+            listEl.innerHTML = `<div class="empty-state">Loading...</div>`;
+            try {
+                const res = await apiFetch("/api/admin/contact-messages");
+                if (res.length === 0) {
+                    listEl.innerHTML = `<div class="empty-state">No messages yet.</div>`;
+                    return;
+                }
+                listEl.innerHTML = res.map(m => `
+                <div class="message-item">
+                    <div class="message-item-header">
+                        <span>${escapeHtml(m.name)} (${escapeHtml(m.email)}) - ${escapeHtml(m.phone || 'No phone')}</span>
+                        <span>${new Date(m.createdAt).toLocaleString()}</span>
+                    </div>
+                    <div style="font-weight:bold;margin-bottom:5px;">Subject: ${escapeHtml(m.subject || 'No subject')}</div>
+                    <div class="message-item-body">${escapeHtml(m.message)}</div>
+                </div>
+            `).join("");
+            } catch (err) {
+                listEl.innerHTML = `<div class="empty-state">Failed to load messages: ${escapeHtml(err.message)}</div>`;
+            }
+        }
 
-    }
+        // ================================================================
+        // ORDERS TAB
+        // ================================================================
 
-</script>
+        const ORDER_STATUS_OPTIONS = ['placed', 'shipped', 'delivered', 'cancelled'];
+
+        async function loadOrders() {
+            const listEl = document.getElementById('orderList');
+            const statsEl = document.getElementById('orderStats');
+            listEl.innerHTML = `<div class="empty-state">Loading orders…</div>`;
+            try {
+                const orders = await apiFetch('/api/admin/orders');
+
+                // Stats
+                const stats = { total: orders.length, placed: 0, shipped: 0, delivered: 0, cancelled: 0, revenue: 0 };
+                orders.forEach(o => {
+                    stats[o.orderStatus] = (stats[o.orderStatus] || 0) + 1;
+                    if (o.orderStatus !== 'cancelled') stats.revenue += (o.total || 0);
+                });
+                statsEl.innerHTML = `
+                    <div class="order-stat-card"><div class="stat-number">${stats.total}</div><div class="stat-label">Total Orders</div></div>
+                    <div class="order-stat-card"><div class="stat-number">${stats.placed || 0}</div><div class="stat-label">Placed</div></div>
+                    <div class="order-stat-card"><div class="stat-number">${stats.shipped || 0}</div><div class="stat-label">Shipped</div></div>
+                    <div class="order-stat-card"><div class="stat-number">${stats.delivered || 0}</div><div class="stat-label">Delivered</div></div>
+                    <div class="order-stat-card"><div class="stat-number">₹${stats.revenue.toLocaleString('en-IN')}</div><div class="stat-label">Revenue</div></div>
+                `;
+
+                if (orders.length === 0) {
+                    listEl.innerHTML = `<div class="empty-state">No orders yet.</div>`;
+                    return;
+                }
+
+                listEl.innerHTML = `
+                <div class="orders-table-wrap">
+                    <table class="orders-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Order No.</th>
+                                <th>Customer</th>
+                                <th>Items</th>
+                                <th>Amount</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Update</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${orders.map((o, idx) => {
+                                const itemSummary = (o.items || []).map(i => `${escapeHtml(i.productName)} ×${i.quantity}`).join(', ');
+                                const d = new Date(o.createdAt);
+                                const dateStr = d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+                                const statusCls = 'status-' + (o.orderStatus || 'placed').toLowerCase();
+                                const payStatusCls = 'status-' + (o.paymentStatus || 'pending').toLowerCase();
+                                const optionsHtml = ORDER_STATUS_OPTIONS.map(s =>
+                                    `<option value="${s}" ${o.orderStatus === s ? 'selected' : ''}>${s.charAt(0).toUpperCase() + s.slice(1)}</option>`
+                                ).join('');
+                                return `
+                                <tr id="order-row-${o.id}">
+                                    <td style="color:#999;font-size:11px;">${idx+1}</td>
+                                    <td style="font-weight:700;font-family:'Courier New',monospace;font-size:12px;color:var(--maroon-dark);">${escapeHtml(o.orderNumber)}</td>
+                                    <td>
+                                        <div style="font-weight:600;">${escapeHtml(o.customerName)}</div>
+                                        <div style="font-size:11px;color:#999;">${escapeHtml(o.customerPhone)}</div>
+                                        ${o.couponCode ? `<div style="font-size:10px;color:#0e7a2f;margin-top:2px;">🏷️ ${escapeHtml(o.couponCode)}</div>` : ''}
+                                    </td>
+                                    <td><div class="order-items-preview">${escapeHtml(itemSummary || '—')}</div></td>
+                                    <td style="font-weight:700;white-space:nowrap;">₹${(o.total || 0).toLocaleString('en-IN')}
+                                        ${o.discount ? `<div style="font-size:10px;color:#0e7a2f;">-₹${o.discount.toLocaleString('en-IN')}</div>` : ''}
+                                    </td>
+                                    <td>
+                                        <span class="status-badge ${payStatusCls}">${o.paymentStatus || 'pending'}</span>
+                                        <div style="font-size:10px;color:#999;margin-top:2px;">${o.paymentMethod || 'cod'}</div>
+                                    </td>
+                                    <td><span class="status-badge ${statusCls}" id="order-status-badge-${o.id}">${o.orderStatus || 'placed'}</span></td>
+                                    <td style="white-space:nowrap;font-size:12px;">${dateStr}</td>
+                                    <td>
+                                        <select class="order-status-select" id="order-select-${o.id}" onchange="updateOrderStatus(${o.id})"
+                                            title="Change order status">
+                                            ${optionsHtml}
+                                        </select>
+                                    </td>
+                                </tr>`;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>`;
+            } catch (err) {
+                listEl.innerHTML = `<div class="empty-state">Failed to load orders: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        async function updateOrderStatus(orderId) {
+            const sel = document.getElementById(`order-select-${orderId}`);
+            const newStatus = sel.value;
+            try {
+                await apiFetch(`/api/admin/orders/${orderId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ orderStatus: newStatus })
+                });
+                const badge = document.getElementById(`order-status-badge-${orderId}`);
+                if (badge) {
+                    badge.className = `status-badge status-${newStatus}`;
+                    badge.textContent = newStatus;
+                }
+            } catch (err) {
+                alert('Failed to update order: ' + err.message);
+                // reload to reset the dropdown to current state
+                loadOrders();
+            }
+        }
+
+        // ================================================================
+        // COUPONS TAB
+        // ================================================================
+
+        const COUPON_ADJECTIVES = ['MEGA', 'SUPER', 'GRAND', 'ROYAL', 'LUCKY', 'FESTIVE', 'DIWALI', 'BRIDAL', 'SPECIAL', 'FLAT', 'SILK', 'JEEWANI'];
+        const COUPON_SUFFIXES   = ['SAVE', 'DEAL', 'OFF', 'FEST', 'SALE', 'SPECIAL', 'OFFER'];
+
+        function generateCouponCode() {
+            const adj = COUPON_ADJECTIVES[Math.floor(Math.random() * COUPON_ADJECTIVES.length)];
+            const suf = COUPON_SUFFIXES[Math.floor(Math.random() * COUPON_SUFFIXES.length)];
+            const num = Math.floor(10 + Math.random() * 90); // 10-99
+            document.getElementById('couponCode').value = `${adj}${num}${suf}`;
+        }
+
+        function updateCouponTypeHint() {
+            const t = document.getElementById('couponType').value;
+            document.getElementById('couponValueLabel').textContent =
+                t === 'percent' ? 'Discount Value (%)' : 'Discount Value (₹)';
+        }
+
+        async function createCoupon() {
+            const errEl = document.getElementById('couponError');
+            errEl.textContent = '';
+
+            const code = document.getElementById('couponCode').value.trim().toUpperCase();
+            const discountType  = document.getElementById('couponType').value;
+            const discountValue = parseInt(document.getElementById('couponValue').value, 10);
+            const minOrder      = parseInt(document.getElementById('couponMinOrder').value, 10) || 0;
+            const maxUsesRaw    = document.getElementById('couponMaxUses').value.trim();
+            const expiryRaw     = document.getElementById('couponExpiry').value;
+            const isActive      = parseInt(document.getElementById('couponActive').value, 10);
+
+            if (!code) { errEl.textContent = 'Please enter a coupon code.'; return; }
+            if (!discountValue || discountValue < 1) { errEl.textContent = 'Please enter a valid discount value.'; return; }
+            if (discountType === 'percent' && discountValue > 100) { errEl.textContent = 'Percentage discount cannot exceed 100%.'; return; }
+
+            const payload = { code, discountType, discountValue, minOrder, isActive };
+            if (maxUsesRaw) payload.maxUses = parseInt(maxUsesRaw, 10);
+            if (expiryRaw)  payload.expiresAt = new Date(expiryRaw).toISOString();
+
+            try {
+                await apiFetch('/api/admin/coupons', { method: 'POST', body: JSON.stringify(payload) });
+                // Reset form
+                ['couponCode','couponValue','couponMinOrder','couponMaxUses','couponExpiry'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+                document.getElementById('couponMinOrder').value = '0';
+                await loadCoupons();
+                // Flash success
+                errEl.style.color = '#0e7a2f';
+                errEl.textContent = '✅ Coupon created successfully!';
+                setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; }, 3000);
+            } catch (err) {
+                errEl.textContent = err.message || 'Failed to create coupon.';
+            }
+        }
+
+        async function toggleCoupon(couponId, currentlyActive) {
+            try {
+                await apiFetch(`/api/admin/coupons/${couponId}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ isActive: currentlyActive ? 0 : 1 })
+                });
+                await loadCoupons();
+            } catch (err) {
+                alert('Failed to update coupon: ' + err.message);
+            }
+        }
+
+        async function deleteCoupon(couponId, code) {
+            if (!confirm(`Delete coupon "${code}"? This cannot be undone.`)) return;
+            try {
+                await apiFetch(`/api/admin/coupons/${couponId}`, { method: 'DELETE' });
+                await loadCoupons();
+            } catch (err) {
+                alert('Failed to delete coupon: ' + err.message);
+            }
+        }
+
+        async function loadCoupons() {
+            const listEl = document.getElementById('couponList');
+            listEl.innerHTML = `<div class="empty-state">Loading coupons…</div>`;
+            try {
+                const coupons = await apiFetch('/api/admin/coupons');
+                if (coupons.length === 0) {
+                    listEl.innerHTML = `<div class="empty-state">No coupons yet. Create one above! 🎟️</div>`;
+                    return;
+                }
+                listEl.innerHTML = `<div class="coupon-list">${coupons.map(c => renderCouponCard(c)).join('')}</div>`;
+            } catch (err) {
+                listEl.innerHTML = `<div class="empty-state">Failed to load coupons: ${escapeHtml(err.message)}</div>`;
+            }
+        }
+
+        function renderCouponCard(c) {
+            const isActive = c.isActive;
+            const discountStr = c.discountType === 'percent'
+                ? `${c.discountValue}% off`
+                : `₹${c.discountValue} off`;
+            const minStr   = c.minOrder > 0 ? `Min order: ₹${c.minOrder.toLocaleString('en-IN')}` : 'No minimum order';
+            const usesStr  = c.maxUses ? `${c.usedCount}/${c.maxUses} uses` : `${c.usedCount} uses (unlimited)`;
+            const expiryStr = c.expiresAt
+                ? `Expires: ${new Date(c.expiresAt).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'})}`
+                : 'No expiry';
+            const isExpired = c.expiresAt && new Date(c.expiresAt) < new Date();
+
+            return `
+            <div class="coupon-card ${!isActive ? 'coupon-inactive-overlay' : ''}">
+                <div class="coupon-card-ticket">${escapeHtml(c.code)}</div>
+                <div class="coupon-card-details">
+                    <h4>${discountStr}
+                        <span class="status-badge ${isActive && !isExpired ? 'status-delivered' : 'status-cancelled'}" style="margin-left:8px;font-size:10px;">
+                            ${isExpired ? 'Expired' : (isActive ? 'Active' : 'Inactive')}
+                        </span>
+                    </h4>
+                    <p>${minStr} &nbsp;·&nbsp; ${usesStr}</p>
+                    <p>${expiryStr}</p>
+                    <p class="coupon-used-count" style="margin-top:4px;font-size:11px;color:#bbb;">Created: ${new Date(c.createdAt).toLocaleDateString('en-IN')}</p>
+                </div>
+                <div class="coupon-card-actions">
+                    <button class="btn-coupon-toggle ${isActive ? 'active' : 'inactive'}" onclick="toggleCoupon(${c.id}, ${isActive})">
+                        ${isActive ? '⏸️ Deactivate' : '▶️ Activate'}
+                    </button>
+                    <button class="btn-coupon-delete" onclick="deleteCoupon(${c.id}, '${escapeHtml(c.code)}')">
+                        🗑️ Delete
+                    </button>
+                </div>
+            </div>`;
+        }
+
+        // ================================================================
+        // DISPLAY PRODUCTS
+        // ================================================================
+
+        function escapeHtml(str) {
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+
+
+
+    </script>
 
 </body>
+
 </html>

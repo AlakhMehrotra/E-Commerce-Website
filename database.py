@@ -88,6 +88,14 @@ def init_db():
     _ensure_column(conn, "users", "is_blocked", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "users", "blocked_at", "TIMESTAMP")
     _ensure_column(conn, "users", "admin_notes", "TEXT DEFAULT ''")
+    # CHANGE: login OTP (email-based 2-step verification) columns on an
+    # existing users table.
+    _ensure_column(conn, "users", "login_otp_code", "TEXT")
+    _ensure_column(conn, "users", "login_otp_expires", "TIMESTAMP")
+    _ensure_column(conn, "users", "login_otp_attempts", "INTEGER NOT NULL DEFAULT 0")
+    # CHANGE: one-time return/replacement allowance flag on an existing
+    # orders table (see schema.sql for the full comment).
+    _ensure_column(conn, "orders", "replacement_used", "INTEGER NOT NULL DEFAULT 0")
     conn.commit()
 
     # Seed products only if the table is empty
@@ -296,6 +304,70 @@ def clear_reset_token(conn, user_id):
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# CHANGE: Login OTP — every customer login now needs a 6-digit code
+# emailed to the account after the password check, confirmed before a
+# session is created. Separate from the password-reset token above (that's
+# for a forgotten password; this runs on every normal sign-in).
+# ─────────────────────────────────────────────────────────────────────────
+LOGIN_OTP_TTL_MINUTES = 5
+LOGIN_OTP_MAX_ATTEMPTS = 5
+
+
+def set_login_otp(conn, user_id, otp_code):
+    """Stores a fresh code and resets the attempt counter, so requesting a
+    new code (sign-in retry or explicit resend) always gives a clean slate
+    rather than inheriting a previous lockout."""
+    expires = (datetime.datetime.now() + datetime.timedelta(minutes=LOGIN_OTP_TTL_MINUTES)).isoformat()
+    conn.execute(
+        "UPDATE users SET login_otp_code = ?, login_otp_expires = ?, login_otp_attempts = 0 WHERE id = ?",
+        (otp_code, expires, user_id),
+    )
+    return expires
+
+
+def verify_login_otp(conn, user_id, submitted_code):
+    """Checks a submitted code against the stored one. Returns one of:
+    'ok', 'expired', 'invalid', or 'locked' (too many wrong guesses — the
+    customer must request a new code via resend). A wrong guess always
+    increments the attempt counter first, so this can't be looped forever."""
+    row = conn.execute(
+        "SELECT login_otp_code, login_otp_expires, login_otp_attempts FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    if not row or not row["login_otp_code"]:
+        return "invalid"
+    if row["login_otp_attempts"] >= LOGIN_OTP_MAX_ATTEMPTS:
+        return "locked"
+    if not row["login_otp_expires"]:
+        return "invalid"
+    try:
+        expires = datetime.datetime.fromisoformat(row["login_otp_expires"])
+    except ValueError:
+        return "invalid"
+    if datetime.datetime.now() > expires:
+        return "expired"
+    if not hmac_compare(submitted_code, row["login_otp_code"]):
+        conn.execute("UPDATE users SET login_otp_attempts = login_otp_attempts + 1 WHERE id = ?", (user_id,))
+        return "invalid"
+    return "ok"
+
+
+def clear_login_otp(conn, user_id):
+    conn.execute(
+        "UPDATE users SET login_otp_code = NULL, login_otp_expires = NULL, login_otp_attempts = 0 WHERE id = ?",
+        (user_id,),
+    )
+
+
+def hmac_compare(a, b):
+    """Constant-time string comparison for the OTP code, same reasoning as
+    comparing password hashes — no need to leak timing information about
+    how many leading digits matched."""
+    import hmac as _hmac
+    return _hmac.compare_digest(str(a or ""), str(b or ""))
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Phase 2: Cart (server-persisted per logged-in customer)
 # ─────────────────────────────────────────────────────────────────────────
 def row_to_cart_item(row):
@@ -384,6 +456,10 @@ def row_to_order(row, items=None):
         "paymentMethod": row["payment_method"],
         "paymentStatus": row["payment_status"],
         "orderStatus": row["order_status"],
+        # CHANGE: exposed so the frontend can decide whether to show the
+        # "Request Replacement / Return" option — never rendered as a
+        # message like "you already used this", just used to hide the button.
+        "replacementUsed": bool(row["replacement_used"]) if "replacement_used" in row.keys() else False,
         "createdAt": row["created_at"],
     }
     if items is not None:
@@ -736,3 +812,95 @@ def get_all_subscribers(conn, active_only=False):
 
 def delete_subscriber(conn, subscriber_id):
     conn.execute("DELETE FROM newsletter_subscribers WHERE id = ?", (subscriber_id,))
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# App Settings
+# ─────────────────────────────────────────────────────────────────────────
+def get_setting(conn, key, default=""):
+    row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    if row:
+        return row["value"]
+    return default
+
+
+def get_all_settings(conn):
+    rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+    return {r["key"]: r["value"] for r in rows}
+
+
+def set_setting(conn, key, value):
+    conn.execute(
+        """INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP""",
+        (key, str(value)),
+    )
+    conn.commit()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Admin Notifications
+# ─────────────────────────────────────────────────────────────────────────
+def create_notification(conn, notif_type, title, message, user_id=None, metadata=None):
+    """Insert a new admin notification."""
+    import json
+    meta_json = json.dumps(metadata) if metadata else "{}"
+    conn.execute(
+        """INSERT INTO admin_notifications (type, title, message, user_id, metadata)
+           VALUES (?, ?, ?, ?, ?)""",
+        (notif_type, title, message, user_id, meta_json),
+    )
+    conn.commit()
+
+
+def get_notifications(conn, unread_only=False, limit=50):
+    """Fetch admin notifications, optionally filtered to unread only."""
+    import json
+    if unread_only:
+        rows = conn.execute(
+            "SELECT * FROM admin_notifications WHERE is_read = 0 ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM admin_notifications ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    result = []
+    for r in rows:
+        meta = {}
+        try:
+            meta = json.loads(r["metadata"]) if r["metadata"] else {}
+        except (json.JSONDecodeError, TypeError):
+            pass
+        result.append({
+            "id": r["id"],
+            "type": r["type"],
+            "title": r["title"],
+            "message": r["message"],
+            "isRead": bool(r["is_read"]),
+            "userId": r["user_id"],
+            "metadata": meta,
+            "createdAt": r["created_at"],
+        })
+    return result
+
+
+def get_unread_notification_count(conn):
+    """Return the number of unread admin notifications."""
+    row = conn.execute("SELECT COUNT(*) AS cnt FROM admin_notifications WHERE is_read = 0").fetchone()
+    return row["cnt"] if row else 0
+
+
+def mark_notification_read(conn, notif_id):
+    """Mark a single notification as read."""
+    conn.execute("UPDATE admin_notifications SET is_read = 1 WHERE id = ?", (notif_id,))
+    conn.commit()
+
+
+def mark_all_notifications_read(conn):
+    """Mark all notifications as read."""
+    conn.execute("UPDATE admin_notifications SET is_read = 1 WHERE is_read = 0")
+    conn.commit()
+
+

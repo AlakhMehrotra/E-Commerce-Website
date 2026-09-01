@@ -5,7 +5,7 @@ Development uses `python app.py` (the Werkzeug dev server). Production
 should use a real WSGI server instead — gunicorn is what this project's
 own README recommends:
 
-    gunicorn -w 4 -b 0.0.0.0:8000 wsgi:app
+    gunicorn -w 4 -b 0.0.0.0:8000 wsgi:app2
 
 This file exists as a conventional, explicit entry point separate from
 app.py so:

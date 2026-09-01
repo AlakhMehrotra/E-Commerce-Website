@@ -22,6 +22,7 @@ import os
 import html
 import threading
 import logging
+import datetime
 
 from flask import current_app
 from flask_mail import Mail, Message
@@ -32,7 +33,7 @@ mail = Mail()
 
 MAIL_ENABLED = bool(os.environ.get("MAIL_SERVER"))
 
-STORE_NAME = "Shri Jeevani Sarees"
+STORE_NAME = "Shri Jeewani Saree Center"
 BRAND_COLOR = "#8b1e3f"   # matches the site's crimson/maroon accent
 CREAM = "#faf6f0"
 
@@ -59,6 +60,14 @@ def init_mail(app):
     app.config.setdefault(
         "CONTACT_NOTIFY_EMAIL",
         os.environ.get("CONTACT_NOTIFY_EMAIL", app.config.get("MAIL_USERNAME", "")),
+    )
+    # CHANGE: where "a customer just logged in" alerts get emailed. Falls
+    # back to the same Gmail/SMTP inbox already used to send order emails,
+    # so this works with zero extra configuration once MAIL_* is set up —
+    # same fallback pattern as CONTACT_NOTIFY_EMAIL above.
+    app.config.setdefault(
+        "ADMIN_NOTIFY_EMAIL",
+        os.environ.get("ADMIN_NOTIFY_EMAIL", app.config.get("MAIL_USERNAME", "")),
     )
     mail.init_app(app)
     if not MAIL_ENABLED:
@@ -277,6 +286,134 @@ def send_password_reset_email(to_email, name, reset_url, expires_minutes):
         subject=f"Reset your {STORE_NAME} password",
         to=to_email,
         html_body=_wrap_html(inner, preheader="Reset your password."),
+        text_body=text,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CHANGE: Login OTP — sent to the customer on every sign-in attempt, after
+# their password has already been checked.
+# ─────────────────────────────────────────────────────────────────────────
+def send_login_otp_email(to_email, name, otp_code, expires_minutes):
+    if not to_email:
+        return
+
+    inner = f"""
+      <h2 style="margin-top:0; color:{BRAND_COLOR};">Your sign-in code</h2>
+      <p>Namaste {html.escape(name)},</p>
+      <p>Use this code to finish signing in to your {STORE_NAME} account:</p>
+      <p style="text-align:center; margin:26px 0;">
+        <span style="display:inline-block; background:{CREAM}; border:1px dashed #d8c9b6; border-radius:8px;
+                     padding:14px 28px; font-size:32px; font-weight:bold; letter-spacing:8px; color:{BRAND_COLOR};">
+          {html.escape(otp_code)}
+        </span>
+      </p>
+      <p style="font-size:13px; color:#8a7f70;">This code expires in {expires_minutes} minutes. If you didn't try to sign in, you can safely ignore this email — your account is still secure.</p>
+    """
+
+    text = (
+        f"Your sign-in code\n\n"
+        f"Namaste {name},\n\n"
+        f"Use this code to finish signing in to your {STORE_NAME} account: {otp_code}\n\n"
+        f"This code expires in {expires_minutes} minutes. If you didn't try to sign in, you can safely ignore this email.\n"
+    )
+
+    _dispatch(
+        subject=f"{otp_code} is your {STORE_NAME} sign-in code",
+        to=to_email,
+        html_body=_wrap_html(inner, preheader=f"Your sign-in code is {otp_code}."),
+        text_body=text,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CHANGE: Admin alert — sent to the store owner's inbox every time a
+# customer completes a login (after their OTP is verified). This is in
+# addition to the in-panel notification-bell entry saved to the database
+# (see database.create_notification) — this function only handles the
+# email half of that.
+# ─────────────────────────────────────────────────────────────────────────
+def send_admin_login_alert_email(admin_email, user, ip_address=None):
+    if not admin_email:
+        logger.info("[mail] ADMIN_NOTIFY_EMAIL not set — customer login only saved to DB, not emailed.")
+        return
+
+    when = datetime.datetime.now().strftime("%d %b %Y, %I:%M %p")
+    inner = f"""
+      <h2 style="margin-top:0; color:{BRAND_COLOR};">Customer login</h2>
+      <p style="background:{CREAM}; padding:10px 14px; border-radius:6px;">
+        <strong>{html.escape(user['name'])}</strong><br>
+        {html.escape(user['email'])}{f" · {html.escape(user['phone'])}" if user.get('phone') else ""}
+      </p>
+      <p style="font-size:13px; color:#8a7f70;">
+        Signed in at {when}{f" from IP {html.escape(ip_address)}" if ip_address else ""}.
+      </p>
+      <p style="font-size:13px; color:#8a7f70;">This is also logged in your Admin panel notification bell.</p>
+    """
+
+    text = (
+        f"Customer login\n\n"
+        f"{user['name']} <{user['email']}>"
+        + (f" · {user['phone']}" if user.get("phone") else "")
+        + f"\nSigned in at {when}"
+        + (f" from IP {ip_address}" if ip_address else "")
+        + "\n"
+    )
+
+    _dispatch(
+        subject=f"Customer login: {user['name']}",
+        to=admin_email,
+        html_body=_wrap_html(inner, preheader=f"{user['name']} just signed in."),
+        text_body=text,
+    )
+
+
+def send_admin_new_order_alert_email(admin_email, order, items):
+    """order: dict shaped like database.row_to_order(). Fired once per order
+    (COD placement, Razorpay verify, or Razorpay webhook — whichever gets
+    there first) from the same claim_confirmation_email() guard that sends
+    the customer's own confirmation email, so this never double-fires."""
+    if not admin_email:
+        logger.info("[mail] ADMIN_NOTIFY_EMAIL not set — new order only saved to DB, not emailed.")
+        return
+
+    items_html = "".join(
+        f"<tr><td style='padding:4px 8px;'>{html.escape(it['productName'])} × {it['quantity']}</td>"
+        f"<td style='padding:4px 8px; text-align:right;'>₹{it['price'] * it['quantity']}</td></tr>"
+        for it in items
+    )
+    items_text = "".join(
+        f"  {it['productName']} × {it['quantity']} — ₹{it['price'] * it['quantity']}\n" for it in items
+    )
+
+    payment_label = "Cash on Delivery" if order["paymentMethod"] == "cod" else "Paid Online (Razorpay)"
+
+    inner = f"""
+      <h2 style="margin-top:0; color:{BRAND_COLOR};">New order placed — #{html.escape(order['orderNumber'])}</h2>
+      <p style="background:{CREAM}; padding:10px 14px; border-radius:6px;">
+        <strong>{html.escape(order['customerName'])}</strong><br>
+        {html.escape(order['customerPhone'])}<br>
+        {html.escape(order['customerAddress'])} — {html.escape(order['customerPincode'])}
+      </p>
+      <table style="width:100%; border-collapse:collapse; font-size:14px;">{items_html}</table>
+      <p style="margin-top:10px;"><strong>Payment:</strong> {payment_label}</p>
+      <p style="font-size:16px;"><strong>Total: ₹{order['total']}</strong></p>
+      <p style="font-size:13px; color:#8a7f70;">This is also logged in your Admin panel notification bell and Orders tab.</p>
+    """
+
+    text = (
+        f"New order placed — #{order['orderNumber']}\n\n"
+        f"{order['customerName']} · {order['customerPhone']}\n"
+        f"{order['customerAddress']} — {order['customerPincode']}\n\n"
+        f"{items_text}\n"
+        f"Payment: {payment_label}\n"
+        f"Total: ₹{order['total']}\n"
+    )
+
+    _dispatch(
+        subject=f"New order #{order['orderNumber']} — ₹{order['total']} ({payment_label})",
+        to=admin_email,
+        html_body=_wrap_html(inner, preheader=f"New order from {order['customerName']} — ₹{order['total']}"),
         text_body=text,
     )
 

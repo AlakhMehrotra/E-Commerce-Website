@@ -44,6 +44,13 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     reset_token   TEXT,
     reset_expires TIMESTAMP,
+    -- Login OTP (email-based 2-step verification): a fresh 6-digit code is
+    -- issued after a correct password and must be confirmed before a
+    -- session is created. login_otp_attempts locks the code out after too
+    -- many wrong guesses instead of letting it be brute-forced.
+    login_otp_code     TEXT,
+    login_otp_expires  TIMESTAMP,
+    login_otp_attempts INTEGER NOT NULL DEFAULT 0,
     -- Phase 6: admin customer management. is_blocked prevents sign-in
     -- without deleting the account (which order history references, so a
     -- hard delete is only allowed when a customer has zero orders).
@@ -74,6 +81,12 @@ CREATE TABLE IF NOT EXISTS orders (
     razorpay_payment_id TEXT,
     order_status    TEXT NOT NULL DEFAULT 'placed',    -- placed/shipped/delivered/cancelled
     confirmation_email_sent INTEGER NOT NULL DEFAULT 0, -- Phase 4: idempotency guard (COD + Razorpay verify + webhook can all race to send this)
+    -- One-time return/replacement policy: flips to 1 the moment a
+    -- return_requests row is created for this order (replace OR return,
+    -- whichever comes first — they share the same allowance). This limit is
+    -- enforced silently: the customer just stops being offered the option
+    -- again, there's no "you already used this" message.
+    replacement_used INTEGER NOT NULL DEFAULT 0,
     created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -195,3 +208,45 @@ CREATE TABLE IF NOT EXISTS newsletter_subscribers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_newsletter_active ON newsletter_subscribers(is_active);
+
+-- ───────────────────────── App Settings ─────────────────────────
+-- Key-value configuration for integrations.
+CREATE TABLE IF NOT EXISTS app_settings (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ───────────────────────── Admin Notifications ─────────────────────────
+-- Real-time notifications for the admin panel (customer logins, signups,
+-- new orders, etc.). The bell icon in the admin header polls this table.
+CREATE TABLE IF NOT EXISTS admin_notifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    type        TEXT NOT NULL,                       -- 'customer_login', 'customer_signup', 'new_order', etc.
+    title       TEXT NOT NULL,                       -- e.g. "Customer Login: Alakh Mehrotra"
+    message     TEXT NOT NULL,                       -- detailed notification body
+    is_read     INTEGER NOT NULL DEFAULT 0,          -- 0 = unread, 1 = read
+    user_id     INTEGER REFERENCES users(id),        -- the customer this notification is about (nullable)
+    metadata    TEXT DEFAULT '{}',                    -- JSON blob for extra data (email, phone, etc.)
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_notif_unread ON admin_notifications(is_read, created_at DESC);
+
+-- ───────────────────────── Return / Replacement requests ─────────────────────────
+-- Customer-initiated return or replacement requests, raised from "My Orders"
+-- once an order is delivered. Policy: at most ONE return-or-replace request
+-- per order (combined allowance, not one of each) — enforced via
+-- orders.replacement_used, see that column's comment above.
+CREATE TABLE IF NOT EXISTS return_requests (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id    INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    user_id     INTEGER REFERENCES users(id),
+    type        TEXT NOT NULL,                     -- 'replace' or 'return'
+    reason      TEXT DEFAULT '',
+    status      TEXT NOT NULL DEFAULT 'pending',    -- pending/approved/rejected/completed
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_return_requests_order ON return_requests(order_id);
+CREATE INDEX IF NOT EXISTS idx_return_requests_status ON return_requests(status, created_at);

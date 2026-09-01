@@ -15,6 +15,8 @@ Run:
 Then open http://localhost:5000
 """
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import re
 import time
 import datetime
@@ -32,6 +34,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import database as db
 import mail as mailer
+import shiprocket as shiprocket_service
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -103,6 +106,29 @@ RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_ENABLED = bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
 VALID_ORDER_STATUSES = {"placed", "shipped", "delivered", "cancelled"}
 
+# CHANGE: Payment-method-based pricing. COD carries a small handling
+# surcharge (cash handling / higher RTO risk for the courier); prepaid
+# (UPI/Card) orders get a discount as an incentive to pay online. Both are
+# applied inside build_order_from_cart() so every order-creation path (COD
+# checkout, Razorpay create/verify, webhook) stays in sync automatically.
+COD_EXTRA_CHARGE = 50          # ₹ added to shipping for Cash on Delivery
+ONLINE_PAYMENT_DISCOUNT_PERCENT = 10   # % off subtotal for UPI/Card
+
+
+def compute_shipping_cost(subtotal, payment_method="cod"):
+    """Return shipping cost with a COD handling fee but no base shipping."""
+    shipping = 0
+    if (payment_method or "cod").lower() == "cod":
+        shipping += COD_EXTRA_CHARGE
+    return shipping
+
+
+# CHANGE: One-time return/replacement policy. A customer gets a single
+# combined allowance per order — either one replacement OR one return,
+# whichever they request first — enforced via orders.replacement_used.
+VALID_RETURN_REQUEST_TYPES = {"replace", "return"}
+VALID_RETURN_REQUEST_STATUSES = {"pending", "approved", "rejected", "completed"}
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Phase 5 CHANGE: SEO — server-rendered meta tags per route.
@@ -116,7 +142,7 @@ VALID_ORDER_STATUSES = {"placed", "shipped", "delivered", "cancelled"}
 # and description per product instead of one generic page for the whole
 # catalogue.
 # ─────────────────────────────────────────────────────────────────────────
-DEFAULT_TITLE = "Shri Jeevani Sarees - Exquisite Banarasi Silk Sarees"
+DEFAULT_TITLE = "Shri Jeewani Saree Center - Exquisite Banarasi Silk Sarees"
 DEFAULT_DESCRIPTION = (
     "Authentic handwoven Banarasi silk sarees from Varanasi — bridal, festive, "
     "classic and contemporary collections, crafted by skilled artisans on the ghats of Kashi."
@@ -207,7 +233,7 @@ def serve_product(slug):
 
     return render_seo_shell(
         f"/product/{slug}",
-        title=f"{product['name']} — {price_str} | Shri Jeevani Sarees",
+        title=f"{product['name']} — {price_str} | Shri Jeewani Saree Center",
         description=f"{description} {price_str} · {product['fabric']}.".strip(),
         og_image=og_image,
         initial_state={"productSlug": slug},
@@ -462,17 +488,21 @@ def build_order_from_cart(conn, user_id, data):
 
     subtotal = sum(i["price"] * i["quantity"] for i in items)
     tax = round(subtotal * 0.05)
-    shipping = 0 if subtotal > 50000 else 500
+    shipping = compute_shipping_cost(subtotal, payment_method)
 
-    discount = 0
+    coupon_discount = 0
     coupon_row = None
     if coupon_code:
         coupon_row = db.find_active_coupon(conn, coupon_code)
         if not coupon_row:
             raise ValueError("Invalid or expired coupon code.")
-        discount, coupon_error = db.compute_coupon_discount(coupon_row, subtotal)
+        coupon_discount, coupon_error = db.compute_coupon_discount(coupon_row, subtotal)
         if coupon_error:
             raise ValueError(coupon_error)
+
+    # CHANGE: online-payment incentive discount, stacks with any coupon.
+    online_discount = round(subtotal * ONLINE_PAYMENT_DISCOUNT_PERCENT / 100) if payment_method in ("upi", "card") else 0
+    discount = coupon_discount + online_discount
 
     total = max(subtotal + tax + shipping - discount, 0)
 
@@ -605,6 +635,62 @@ def send_order_confirmation_if_owed(conn, order_id, user_id):
     items = db.get_order_items(conn, order_id)
     if user:
         mailer.send_order_confirmation_email(user["email"], db.row_to_order(row), items)
+    # This claim_confirmation_email() guard is the one place a new order is
+    # guaranteed to be reported exactly once, regardless of which of the
+    # three callers (COD checkout, Razorpay verify, Razorpay webhook) got
+    # here first — so the admin "new order" alert piggybacks on it too.
+    _notify_admin_of_new_order(db.row_to_order(row), items)
+    # Same guarantee is exactly what's needed to auto-start the Shiprocket
+    # delivery process exactly once per order, whether COD or prepaid.
+    _dispatch_to_shiprocket(db.row_to_order(row), items, user)
+
+
+def _notify_admin_of_new_order(order, items):
+    """Best-effort admin alert for a newly-placed/paid order: one row in the
+    admin_notifications table (powers the panel's bell icon) plus one email
+    to ADMIN_NOTIFY_EMAIL. Either half failing must never break checkout."""
+    try:
+        notif_conn = db.get_db()
+        db.create_notification(
+            notif_conn,
+            "new_order",
+            f"New Order: {order['orderNumber']}",
+            f"{order['customerName']} placed an order for ₹{order['total']} "
+            f"({'COD' if order['paymentMethod'] == 'cod' else 'Paid Online'}).",
+            metadata={"orderNumber": order["orderNumber"], "total": order["total"], "paymentMethod": order["paymentMethod"]},
+        )
+        notif_conn.close()
+    except Exception:
+        app.logger.exception("Failed to create new_order notification")
+
+    try:
+        mailer.send_admin_new_order_alert_email(app.config.get("ADMIN_NOTIFY_EMAIL"), order, items)
+    except Exception:
+        app.logger.exception("Failed to send new_order admin alert email")
+
+
+def _dispatch_to_shiprocket(order, items, user):
+    """Best-effort: creates the shipment on Shiprocket and requests pickup
+    so the delivery process starts immediately, for both COD and prepaid
+    orders. Never blocks or fails checkout if Shiprocket isn't configured
+    or is unreachable — it just logs and the order stays shippable
+    manually from the Shiprocket dashboard."""
+    if not shiprocket_service.SHIPROCKET_ENABLED:
+        return
+    try:
+        ship_conn = db.get_db()
+        result = shiprocket_service.create_shipment(
+            order, items, ship_conn, customer_email=(user["email"] if user else "")
+        )
+        if result.get("awb"):
+            ship_conn.execute(
+                "UPDATE orders SET order_status = 'shipped' WHERE id = ? AND order_status = 'placed'",
+                (order["id"],),
+            )
+            ship_conn.commit()
+        ship_conn.close()
+    except Exception:
+        app.logger.exception("Failed to create Shiprocket shipment for order %s", order.get("orderNumber"))
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -846,6 +932,53 @@ def admin_stats():
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Admin Notifications — powers the bell icon in the admin panel. Fed by
+# customer_login (and can be extended the same way for customer_signup,
+# new_order, etc. — see database.create_notification).
+# ─────────────────────────────────────────────────────────────────────────
+@app.route("/api/admin/notifications", methods=["GET"])
+@admin_required
+def admin_notifications():
+    unread_only = request.args.get("unread") == "true"
+    try:
+        limit = min(int(request.args.get("limit", 50)), 200)
+    except ValueError:
+        limit = 50
+    conn = db.get_db()
+    notifications = db.get_notifications(conn, unread_only=unread_only, limit=limit)
+    unread_count = db.get_unread_notification_count(conn)
+    conn.close()
+    return jsonify({"notifications": notifications, "unreadCount": unread_count})
+
+
+@app.route("/api/admin/notifications/unread-count", methods=["GET"])
+@admin_required
+def admin_notifications_unread_count():
+    conn = db.get_db()
+    count = db.get_unread_notification_count(conn)
+    conn.close()
+    return jsonify({"unreadCount": count})
+
+
+@app.route("/api/admin/notifications/<int:notif_id>/read", methods=["POST"])
+@admin_required
+def admin_notification_mark_read(notif_id):
+    conn = db.get_db()
+    db.mark_notification_read(conn, notif_id)
+    conn.close()
+    return jsonify({"success": True})
+
+
+@app.route("/api/admin/notifications/read-all", methods=["POST"])
+@admin_required
+def admin_notifications_mark_all_read():
+    conn = db.get_db()
+    db.mark_all_notifications_read(conn)
+    conn.close()
+    return jsonify({"success": True})
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Phase 2 CHANGE: Customer auth API
 # ─────────────────────────────────────────────────────────────────────────
 @app.route("/api/auth/signup", methods=["POST"])
@@ -885,9 +1018,140 @@ def auth_signup():
     row = db.get_user_by_id(conn, user_id)
     conn.close()
 
-    session["user_id"] = user_id
+    # CHANGE (Login OTP pass): new accounts also need email verification via OTP
+    # before they can sign in. Same 6-digit code flow as login, reusing the same
+    # login_otp_* columns (no conflict since the account is brand new and hasn't
+    # signed in yet). The account exists but is locked until OTP is verified.
+    _issue_login_otp(row)
+
+    return jsonify({
+        "otpRequired": True,
+        "email": email,
+        "emailHint": _mask_email(email),
+        "message": f"We've sent a 6-digit code to {_mask_email(email)}. Enter it below to activate your account.",
+    }), 201
+
+
+@app.route("/api/auth/signup/verify-otp", methods=["POST"])
+def auth_signup_verify_otp():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    otp = (data.get("otp") or "").strip()
+
+    if not email or not otp:
+        return jsonify({"error": "Please enter the 6-digit code."}), 400
+
+    # Same rate limiting as login OTP verification — keyed by email so signup
+    # and login OTP attempts don't share a bucket (they're independent flows).
+    if rate_limited(login_rate_key("signup-otp:" + email)):
+        return jsonify({"error": "Too many attempts. Please wait a few minutes and try again."}), 429
+
+    conn = db.get_db()
+    row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    if not row:
+        conn.close()
+        return jsonify({"error": "Account not found. Please sign up again."}), 400
+
+    result = db.verify_login_otp(conn, row["id"], otp)
+    conn.commit()
+
+    if result == "expired":
+        conn.close()
+        return jsonify({"error": "This code has expired. Please sign up again."}), 400
+    if result == "locked":
+        conn.close()
+        return jsonify({"error": "Too many incorrect attempts. Please sign up again."}), 429
+    if result != "ok":
+        conn.close()
+        return jsonify({"error": "That code is incorrect. Please check and try again."}), 401
+
+    db.clear_login_otp(conn, row["id"])
+    conn.commit()
+    conn.close()
+
+    # OTP verified — now create the session and the account is active.
+    session["user_id"] = row["id"]
     session.permanent = True
-    return jsonify({"success": True, "user": db.row_to_user(row)}), 201
+
+    return jsonify({"success": True, "user": db.row_to_user(row)})
+
+
+@app.route("/api/auth/signup/resend-otp", methods=["POST"])
+def auth_signup_resend_otp():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+
+    if not email:
+        return jsonify({"error": "Please sign up again."}), 400
+
+    # Rate-limited like login resend, so "resend" can't be used to spam a mailbox.
+    if rate_limited(login_rate_key("signup-otp-resend:" + email)):
+        return jsonify({"error": "Please wait a little before requesting another code."}), 429
+
+    conn = db.get_db()
+    row = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    conn.close()
+
+    # Security fix: identical response whether or not the email matches a
+    # pending signup, so this endpoint can't enumerate emails.
+    if row and not row["is_blocked"] and row["email"]:
+        _issue_login_otp(row)
+
+    return jsonify({"success": True, "message": "If that account exists, a new code has been sent."})
+
+
+def _mask_email(email):
+    """al***@gmail.com — enough for the customer to recognise their own
+    inbox on the "enter the code we sent" screen without fully re-exposing
+    the address to anyone watching the response."""
+    try:
+        local, domain = email.split("@", 1)
+    except ValueError:
+        return email
+    if len(local) <= 2:
+        masked = local[0] + "*" * max(len(local) - 1, 1)
+    else:
+        masked = local[:2] + "*" * (len(local) - 2)
+    return f"{masked}@{domain}"
+
+
+def _issue_login_otp(row):
+    """Generates a fresh 6-digit code, stores it against this user, and
+    emails it. Used by both the initial login attempt and the resend
+    endpoint so the two stay in sync."""
+    otp_code = f"{secrets.randbelow(1000000):06d}"
+    conn = db.get_db()
+    db.set_login_otp(conn, row["id"], otp_code)
+    conn.commit()
+    conn.close()
+    mailer.send_login_otp_email(row["email"], row["name"], otp_code, db.LOGIN_OTP_TTL_MINUTES)
+
+
+def _notify_admin_of_login(row):
+    """Best-effort admin alert for a completed login: one row in the
+    admin_notifications table (powers the panel's bell icon) plus one email
+    to ADMIN_NOTIFY_EMAIL. Either half failing must never block or fail the
+    customer's own login."""
+    try:
+        notif_conn = db.get_db()
+        db.create_notification(
+            notif_conn,
+            "customer_login",
+            f"Customer Login: {row['name']}",
+            f"{row['name']} ({row['email']}) just logged in.",
+            user_id=row["id"],
+            metadata={"email": row["email"], "phone": row["phone"], "ip": request.remote_addr},
+        )
+        notif_conn.close()
+    except Exception:
+        app.logger.exception("Failed to create customer_login notification")
+
+    try:
+        mailer.send_admin_login_alert_email(
+            app.config.get("ADMIN_NOTIFY_EMAIL"), db.row_to_user(row), ip_address=request.remote_addr
+        )
+    except Exception:
+        app.logger.exception("Failed to send customer_login admin alert email")
 
 
 @app.route("/api/auth/login", methods=["POST"])
@@ -915,9 +1179,100 @@ def auth_login():
     if row["is_blocked"]:
         return jsonify({"error": "This account has been suspended. Please contact support for assistance."}), 403
 
+    # CHANGE: password alone no longer creates a session. A 6-digit code is
+    # emailed to the account and must be confirmed via
+    # /api/auth/login/verify-otp before sign-in completes — the customer_login
+    # notification (DB row + admin email) now fires from that step instead.
+    if not row["email"]:
+        # No email on file to send a code to — extremely unlikely (signup
+        # requires one) but fail safe rather than lock the customer out.
+        session["user_id"] = row["id"]
+        session.permanent = True
+        _notify_admin_of_login(row)
+        return jsonify({"success": True, "user": db.row_to_user(row)})
+
+    _issue_login_otp(row)
+    return jsonify({
+        "otpRequired": True,
+        "identifier": identifier,
+        "emailHint": _mask_email(row["email"]),
+        "message": f"We've sent a 6-digit code to {_mask_email(row['email'])}. Enter it below to finish signing in.",
+    })
+
+
+@app.route("/api/auth/login/verify-otp", methods=["POST"])
+def auth_login_verify_otp():
+    data = request.get_json(silent=True) or {}
+    identifier = (data.get("identifier") or "").strip()
+    otp = (data.get("otp") or "").strip()
+
+    if not identifier or not otp:
+        return jsonify({"error": "Please enter the 6-digit code."}), 400
+
+    # Security fix: same brute-force protection as the password step —
+    # keyed separately so guessing OTPs doesn't share (or exhaust) the
+    # password attempt budget, and vice versa.
+    if rate_limited(login_rate_key("otp:" + identifier)):
+        return jsonify({"error": "Too many attempts. Please wait a few minutes and try again."}), 429
+
+    conn = db.get_db()
+    row = db.get_user_by_identifier(conn, identifier)
+    if not row:
+        conn.close()
+        return jsonify({"error": "Session expired. Please sign in again."}), 400
+
+    if row["is_blocked"]:
+        conn.close()
+        return jsonify({"error": "This account has been suspended. Please contact support for assistance."}), 403
+
+    result = db.verify_login_otp(conn, row["id"], otp)
+    conn.commit()
+
+    if result == "expired":
+        conn.close()
+        return jsonify({"error": "This code has expired. Please request a new one."}), 400
+    if result == "locked":
+        conn.close()
+        return jsonify({"error": "Too many incorrect attempts. Please request a new code."}), 429
+    if result != "ok":
+        conn.close()
+        return jsonify({"error": "That code is incorrect. Please check and try again."}), 401
+
+    db.clear_login_otp(conn, row["id"])
+    conn.commit()
+    conn.close()
+
     session["user_id"] = row["id"]
     session.permanent = True
+
+    _notify_admin_of_login(row)
+
     return jsonify({"success": True, "user": db.row_to_user(row)})
+
+
+@app.route("/api/auth/login/resend-otp", methods=["POST"])
+def auth_login_resend_otp():
+    data = request.get_json(silent=True) or {}
+    identifier = (data.get("identifier") or "").strip()
+
+    if not identifier:
+        return jsonify({"error": "Please sign in again."}), 400
+
+    # Security fix: rate-limited like every other email-sending endpoint, so
+    # "resend" can't be used to spam a mailbox.
+    if rate_limited(login_rate_key("otp-resend:" + identifier)):
+        return jsonify({"error": "Please wait a little before requesting another code."}), 429
+
+    conn = db.get_db()
+    row = db.get_user_by_identifier(conn, identifier)
+    conn.close()
+
+    # Security fix: identical response whether or not the identifier still
+    # matches an account, so this can't be used to enumerate users either.
+    if row and not row["is_blocked"] and row["email"]:
+        _issue_login_otp(row)
+
+    return jsonify({"success": True, "message": "If that account exists, a new code has been sent."})
 
 
 @app.route("/api/auth/logout", methods=["POST"])
@@ -1345,6 +1700,107 @@ def get_order(order_number):
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# CHANGE: Customer-raised Return / Replacement requests.
+# Policy: one combined replace-or-return allowance per delivered order
+# (orders.replacement_used). Deliberately generic error messages below —
+# the one-time limit itself is never spelled out to the customer; the
+# "Request Replacement/Return" option simply stops appearing once used.
+# ─────────────────────────────────────────────────────────────────────────
+@app.route("/api/orders/<order_number>/return-request", methods=["POST"])
+@customer_required
+def create_return_request(order_number):
+    data = request.get_json(silent=True) or {}
+    req_type = (data.get("type") or "").strip().lower()
+    reason = (data.get("reason") or "").strip()[:500]
+
+    if req_type not in VALID_RETURN_REQUEST_TYPES:
+        return jsonify({"error": "Please choose Replace or Return."}), 400
+
+    conn = db.get_db()
+    row = db.get_order_by_number(conn, order_number, session["user_id"])
+    if not row:
+        conn.close()
+        return jsonify({"error": "Order not found."}), 404
+
+    if row["order_status"] != "delivered" or row["replacement_used"]:
+        conn.close()
+        return jsonify({"error": "Return/Replacement is not available for this order."}), 400
+
+    conn.execute(
+        "INSERT INTO return_requests (order_id, user_id, type, reason) VALUES (?, ?, ?, ?)",
+        (row["id"], session["user_id"], req_type, reason),
+    )
+    conn.execute("UPDATE orders SET replacement_used = 1 WHERE id = ?", (row["id"],))
+    conn.commit()
+
+    try:
+        db.create_notification(
+            conn,
+            "return_request",
+            f"{'Replacement' if req_type == 'replace' else 'Return'} Requested: {order_number}",
+            f"{row['customer_name']} requested a {req_type} for order #{order_number}."
+            + (f" Reason: {reason}" if reason else ""),
+            user_id=session["user_id"],
+            metadata={"orderNumber": order_number, "type": req_type},
+        )
+    except Exception:
+        app.logger.exception("Failed to create return_request notification")
+
+    updated = conn.execute("SELECT * FROM orders WHERE id = ?", (row["id"],)).fetchone()
+    items = db.get_order_items(conn, row["id"])
+    conn.close()
+    return jsonify(db.row_to_order(updated, items)), 201
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CHANGE: Customer-initiated order cancellation. Only allowed while the
+# order is still "placed" (i.e. before the shop has shipped it) — once it's
+# shipped, cancellation has to go through support/admin since the parcel is
+# already in the courier's hands. Cancelling here restocks the items (same
+# as the admin-side cancel) and, if it was prepaid, just flags the order so
+# admin knows a manual refund is owed — this project has no automated
+# Razorpay refund flow yet.
+# ─────────────────────────────────────────────────────────────────────────
+@app.route("/api/orders/<order_number>/cancel", methods=["POST"])
+@customer_required
+def cancel_order(order_number):
+    conn = db.get_db()
+    row = db.get_order_by_number(conn, order_number, session["user_id"])
+    if not row:
+        conn.close()
+        return jsonify({"error": "Order not found."}), 404
+
+    if row["order_status"] != "placed":
+        conn.close()
+        return jsonify({"error": "This order can no longer be cancelled. Please contact support."}), 400
+
+    for item in db.get_order_items(conn, row["id"]):
+        conn.execute("UPDATE products SET stock = stock + ? WHERE id = ?", (item["quantity"], item["productId"]))
+
+    conn.execute("UPDATE orders SET order_status = 'cancelled' WHERE id = ?", (row["id"],))
+    conn.commit()
+
+    needs_refund = row["payment_method"] != "cod" and row["payment_status"] == "paid"
+    try:
+        db.create_notification(
+            conn,
+            "order_cancelled",
+            f"Order Cancelled by Customer: {order_number}",
+            f"{row['customer_name']} cancelled order #{order_number}."
+            + (" Payment was already captured — refund needs to be issued manually." if needs_refund else ""),
+            user_id=session["user_id"],
+            metadata={"orderNumber": order_number, "needsRefund": needs_refund},
+        )
+    except Exception:
+        app.logger.exception("Failed to create order_cancelled notification")
+
+    updated = conn.execute("SELECT * FROM orders WHERE id = ?", (row["id"],)).fetchone()
+    items = db.get_order_items(conn, row["id"])
+    conn.close()
+    return jsonify(db.row_to_order(updated, items))
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Phase 3 CHANGE: Razorpay checkout (UPI / Card)
 # ─────────────────────────────────────────────────────────────────────────
 @app.route("/api/orders/razorpay/create", methods=["POST"])
@@ -1632,6 +2088,58 @@ def admin_update_order(order_id):
     items = db.get_order_items(conn, order_id)
     conn.close()
     return jsonify(db.row_to_order(row, items))
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# CHANGE: Admin — Return / Replacement requests management
+# ─────────────────────────────────────────────────────────────────────────
+@app.route("/api/admin/return-requests", methods=["GET"])
+@admin_required
+def admin_list_return_requests():
+    conn = db.get_db()
+    rows = conn.execute(
+        """SELECT r.*, o.order_number, o.customer_name, o.customer_phone, o.total
+           FROM return_requests r
+           JOIN orders o ON o.id = r.order_id
+           ORDER BY r.created_at DESC"""
+    ).fetchall()
+    conn.close()
+    return jsonify([
+        {
+            "id": r["id"],
+            "orderId": r["order_id"],
+            "orderNumber": r["order_number"],
+            "customerName": r["customer_name"],
+            "customerPhone": r["customer_phone"],
+            "orderTotal": r["total"],
+            "type": r["type"],
+            "reason": r["reason"] or "",
+            "status": r["status"],
+            "createdAt": r["created_at"],
+        }
+        for r in rows
+    ])
+
+
+@app.route("/api/admin/return-requests/<int:request_id>", methods=["PUT"])
+@admin_required
+def admin_update_return_request(request_id):
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip().lower()
+    if status not in VALID_RETURN_REQUEST_STATUSES:
+        return jsonify({"error": f"Status must be one of: {', '.join(sorted(VALID_RETURN_REQUEST_STATUSES))}."}), 400
+
+    conn = db.get_db()
+    existing = conn.execute("SELECT * FROM return_requests WHERE id = ?", (request_id,)).fetchone()
+    if not existing:
+        conn.close()
+        return jsonify({"error": "Request not found."}), 404
+
+    conn.execute("UPDATE return_requests SET status = ? WHERE id = ?", (status, request_id))
+    conn.commit()
+    conn.close()
+    return jsonify({"success": True, "status": status})
+
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -2088,7 +2596,7 @@ def newsletter_unsubscribe():
     body = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Unsubscribed</title></head>
     <body style="font-family:Georgia,serif;background:#faf6f0;padding:60px 20px;text-align:center;color:#2b2320;">
       <h2 style="color:#8b1e3f;">{html_lib.escape(message)}</h2>
-      <p><a href="{SITE_URL}/" style="color:#8b1e3f;">Return to Shri Jeevani Sarees</a></p>
+      <p><a href="{SITE_URL}/" style="color:#8b1e3f;">Return to Shri Jeewani Saree Center</a></p>
     </body></html>"""
     return Response(body, mimetype="text/html")
 
@@ -2146,4 +2654,4 @@ if __name__ == "__main__":
     # execution from any unhandled exception — it must be an explicit
     # opt-in for local development, never the unset-env default.
     debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=debug_mode)
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)), debug=debug_mode)
