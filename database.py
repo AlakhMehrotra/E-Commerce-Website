@@ -13,11 +13,37 @@ import re
 import time
 import secrets
 import datetime
+import shutil
 from werkzeug.security import generate_password_hash
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "jeevani.db")
 SCHEMA_PATH = os.path.join(BASE_DIR, "schema.sql")
+BUNDLED_DB = os.path.join(BASE_DIR, "jeevani.db")
+
+
+def _get_db_path():
+    """Determine database file path.
+    On Vercel and serverless environments (AWS Lambda), the root filesystem is read-only.
+    We automatically route to /tmp/database.db (or /tmp/jeevani.db) and copy over the bundled DB
+    if available so existing data & products are immediately usable."""
+    env_path = os.environ.get("JEEVANI_DB_PATH")
+    if env_path:
+        return env_path
+
+    # Check for Vercel or AWS Lambda / Serverless environment
+    if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") or os.environ.get("NOW_REGION"):
+        tmp_db = "/tmp/database.db"
+        if not os.path.exists(tmp_db) and os.path.exists(BUNDLED_DB):
+            try:
+                shutil.copy2(BUNDLED_DB, tmp_db)
+            except Exception as e:
+                print(f"[DB] Could not copy bundled DB to {tmp_db}: {e}")
+        return tmp_db
+
+    return os.path.join(BASE_DIR, "jeevani.db")
+
+
+DB_PATH = _get_db_path()
 
 # Default admin credentials (same as the previous admin.html hardcoded
 # login) — now stored as a hash, never in plaintext, and overridable via
@@ -50,10 +76,30 @@ SEED_COUPONS = [
 ]
 
 
-def get_db():
+def _connect_db():
+    global DB_PATH
+    DB_PATH = _get_db_path()
+    os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+_db_initialized = False
+
+
+def get_db():
+    global _db_initialized
+    conn = _connect_db()
+    if not _db_initialized:
+        _db_initialized = True
+        try:
+            exists = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='products'").fetchone()
+            if not exists:
+                init_db()
+        except Exception as e:
+            print(f"[DB] Auto-init notice: {e}")
     return conn
 
 
@@ -77,7 +123,7 @@ def _ensure_column(conn, table, column, ddl_type_and_default):
 
 def init_db():
     """Create tables (if missing) and seed initial data. Safe to call every startup."""
-    conn = get_db()
+    conn = _connect_db()
     with open(SCHEMA_PATH, "r", encoding="utf-8") as f:
         conn.executescript(f.read())
     conn.commit()
