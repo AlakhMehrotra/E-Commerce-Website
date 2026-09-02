@@ -1739,7 +1739,7 @@
                         return `
                         <div class="product">
                             ${photosCount > 1 ? `<span class="product-photo-count">📷 ${photosCount} photos</span>` : ''}
-                            <img src="${escapeHtml(img)}" alt="${escapeHtml(p.name)}">
+                            ${img ? `<img src="${escapeHtml(img)}" alt="${escapeHtml(p.name)}">` : `<div style="width:100%;height:140px;display:flex;align-items:center;justify-content:center;font-size:3rem;background:var(--cream);">${escapeHtml(p.emoji || '🌸')}</div>`}
                             <div class="info">
                                 <h3>${escapeHtml(p.name)}</h3>
                                 <div class="price">₹${p.price}</div>
@@ -1845,7 +1845,7 @@
                         </thead>
                         <tbody>
                             ${orders.map((o, idx) => {
-                                const itemSummary = (o.items || []).map(i => `${escapeHtml(i.productName)} ×${i.quantity}`).join(', ');
+                                const itemSummary = (o.items || []).map(i => `${escapeHtml(i.productName || i.name || 'Saree')} ×${i.quantity}`).join(', ');
                                 const d = new Date(o.createdAt);
                                 const dateStr = d.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
                                 const statusCls = 'status-' + (o.orderStatus || 'placed').toLowerCase();

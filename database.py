@@ -493,6 +493,7 @@ def row_to_order_item(row):
     return {
         "productId": row["product_id"],
         "name": row["product_name"],
+        "productName": row["product_name"],
         "price": row["price"],
         "quantity": row["quantity"],
     }

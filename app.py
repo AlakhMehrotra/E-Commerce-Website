@@ -1810,8 +1810,12 @@ def validate_coupon_route():
         return jsonify({"error": "Please enter a coupon code."}), 400
 
     conn = db.get_db()
-    items = db.get_cart_items(conn, session["user_id"])
-    subtotal = sum(i["price"] * i["quantity"] for i in items)
+    provided_subtotal = data.get("subtotal")
+    if provided_subtotal is not None and isinstance(provided_subtotal, (int, float)) and provided_subtotal > 0:
+        subtotal = float(provided_subtotal)
+    else:
+        items = db.get_cart_items(conn, session["user_id"])
+        subtotal = sum(i["price"] * i["quantity"] for i in items)
 
     coupon = db.find_active_coupon(conn, code)
     if not coupon:

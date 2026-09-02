@@ -1035,9 +1035,10 @@ async function applyCoupon() {
     msgEl.className = 'coupon-message';
 
     try {
+        const subtotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
         const data = await apiFetch('/api/coupons/validate', {
             method: 'POST',
-            body: JSON.stringify({ code }),
+            body: JSON.stringify({ code, subtotal }),
         });
         appliedCoupon = data;
         msgEl.textContent = `Coupon applied! You saved ₹${data.discount.toLocaleString('en-IN')}.`;
