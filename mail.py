@@ -423,12 +423,12 @@ def send_admin_new_order_alert_email(admin_email, order, items):
         return
 
     items_html = "".join(
-        f"<tr><td style='padding:4px 8px;'>{html.escape(it['productName'])} × {it['quantity']}</td>"
+        f"<tr><td style='padding:4px 8px;'>{html.escape(it.get('productName') or it.get('name') or 'Saree')} × {it['quantity']}</td>"
         f"<td style='padding:4px 8px; text-align:right;'>₹{it['price'] * it['quantity']}</td></tr>"
         for it in items
     )
     items_text = "".join(
-        f"  {it['productName']} × {it['quantity']} — ₹{it['price'] * it['quantity']}\n" for it in items
+        f"  {it.get('productName') or it.get('name') or 'Saree'} × {it['quantity']} — ₹{it['price'] * it['quantity']}\n" for it in items
     )
 
     payment_label = "Cash on Delivery" if order["paymentMethod"] == "cod" else "Paid Online (Razorpay)"

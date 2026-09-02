@@ -75,14 +75,14 @@ def _lookup_city_state(pincode):
     Shiprocket order create call still gets attempted with blanks rather
     than blocking the whole shipment on this one lookup."""
     try:
-        res = requests.get(f"https://api.postalpincode.in/pincode/{pincode}", timeout=8)
+        res = requests.get(f"https://api.postalpincode.in/pincode/{pincode}", timeout=3)
         res.raise_for_status()
         data = res.json()
         if data and data[0].get("Status") == "Success" and data[0].get("PostOffice"):
             po = data[0]["PostOffice"][0]
             return po.get("District", ""), po.get("State", "")
     except Exception:
-        logger.exception("Pincode -> city/state lookup failed for %s", pincode)
+        logger.warning("Pincode lookup fallback for %s", pincode)
     return "", ""
 
 

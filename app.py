@@ -477,10 +477,19 @@ def build_order_from_cart(conn, user_id, data):
 
     if not name or not phone or not address or not pincode:
         raise ValueError("Please fill in all shipping details.")
-    if payment_method not in ("cod", "upi", "card"):
-        payment_method = "cod"
-
     items = db.get_cart_items(conn, user_id)
+    if not items and data.get("items"):
+        client_items = data.get("items") or []
+        for ci in client_items:
+            pid = ci.get("productId") or ci.get("id")
+            qty = max(int(ci.get("quantity") or 1), 1)
+            p_row = conn.execute("SELECT * FROM products WHERE id = ? AND is_active = 1", (pid,)).fetchone()
+            if p_row:
+                item_dict = dict(p_row)
+                item_dict["quantity"] = qty
+                item_dict["productId"] = pid
+                items.append(item_dict)
+
     if not items:
         raise ValueError("Your cart is empty.")
 

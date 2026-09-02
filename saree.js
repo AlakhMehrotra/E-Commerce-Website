@@ -24,7 +24,23 @@ let pendingLoginOtpToken = null;
 let pendingSignupEmail = null;
 let pendingSignupOtpToken = null;
 let products = [];
-let cart = [];
+
+const CART_STORAGE_KEY = 'jeevani_cart_items_v1';
+function getLocalCart() {
+    try {
+        const raw = localStorage.getItem(CART_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+        return [];
+    }
+}
+function saveLocalCart() {
+    try {
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    } catch (e) {}
+}
+
+let cart = getLocalCart();
 let wishlist = [];          // Phase 2: array of full product objects
 let wishlistIds = new Set(); // Phase 2: quick lookup for heart icon state
 let currentPage = 'home';
@@ -537,39 +553,43 @@ async function filterProducts() {
 
 // ─────────────────────────────────────────────────────────────────────────
 // Cart Functions
-// CHANGE (Phase 2): when a customer is signed in, the cart is persisted on
-// the server (/api/cart) so it survives across devices/sessions. Guests
-// keep the original in-memory behavior so checkout still works without an
-// account, exactly as before.
 // ─────────────────────────────────────────────────────────────────────────
-function addToCart(productId) {
+// Cart Functions
+// CHANGE (Phase 2): cart is persisted in localStorage & synchronized with server
+// so it is always instant and robust on serverless (Vercel) hosting.
+// ─────────────────────────────────────────────────────────────────────────
+function addToCart(productId, quantity = 1) {
     const product = products.find(p => p.id === productId);
     if (!product) return;
+
+    const existingItem = cart.find(item => item.id === productId);
+    if (existingItem) {
+        existingItem.quantity += quantity;
+    } else {
+        cart.push({ ...product, quantity: quantity });
+    }
+
+    saveLocalCart();
+    updateCartCount();
+    showNotification('Added to cart!');
 
     if (currentUser) {
         apiFetch('/api/cart', {
             method: 'POST',
-            body: JSON.stringify({ productId, quantity: 1 }),
+            body: JSON.stringify({ productId, quantity }),
         }).then(items => {
-            cart = items;
-            updateCartCount();
-            if (document.getElementById('cartModal').classList.contains('active')) renderCart();
+            if (Array.isArray(items) && items.length > 0) {
+                cart = items;
+                saveLocalCart();
+                updateCartCount();
+                if (document.getElementById('cartModal').classList.contains('active')) renderCart();
+            }
         }).catch(err => {
-            showNotification('Could not add to cart: ' + err.message);
+            console.warn('Server cart sync notice:', err);
         });
-        showNotification('Added to cart!');
-        return;
     }
 
-    const existingItem = cart.find(item => item.id === productId);
-    if (existingItem) {
-        existingItem.quantity += 1;
-    } else {
-        cart.push({ ...product, quantity: 1 });
-    }
-
-    updateCartCount();
-    showNotification('Added to cart!');
+    if (document.getElementById('cartModal').classList.contains('active')) renderCart();
 }
 
 function updateCartCount() {
@@ -649,47 +669,49 @@ function updateQuantity(productId, change) {
     if (!item) return;
 
     const newQty = item.quantity + change;
-
-    if (currentUser) {
-        if (newQty <= 0) {
-            removeFromCart(productId);
-            return;
-        }
-        apiFetch(`/api/cart/${productId}`, {
-            method: 'PUT',
-            body: JSON.stringify({ quantity: newQty }),
-        }).then(items => {
-            cart = items;
-            updateCartCount();
-            renderCart();
-        }).catch(err => showNotification('Could not update cart: ' + err.message));
+    if (newQty <= 0) {
+        removeFromCart(productId);
         return;
     }
 
     item.quantity = newQty;
-    if (item.quantity <= 0) {
-        removeFromCart(productId);
-    } else {
-        updateCartCount();
-        renderCart();
+    saveLocalCart();
+    updateCartCount();
+    renderCart();
+
+    if (currentUser) {
+        apiFetch(`/api/cart/${productId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ quantity: newQty }),
+        }).then(items => {
+            if (Array.isArray(items) && items.length > 0) {
+                cart = items;
+                saveLocalCart();
+                updateCartCount();
+                renderCart();
+            }
+        }).catch(err => console.warn('Server cart update notice:', err));
     }
 }
 
 function removeFromCart(productId) {
+    cart = cart.filter(item => item.id !== productId);
+    saveLocalCart();
+    updateCartCount();
+    renderCart();
+
     if (currentUser) {
         apiFetch(`/api/cart/${productId}`, { method: 'DELETE' })
             .then(items => {
-                cart = items;
-                updateCartCount();
-                renderCart();
+                if (Array.isArray(items)) {
+                    cart = items;
+                    saveLocalCart();
+                    updateCartCount();
+                    renderCart();
+                }
             })
-            .catch(err => showNotification('Could not remove item: ' + err.message));
-        return;
+            .catch(err => console.warn('Server cart remove notice:', err));
     }
-
-    cart = cart.filter(item => item.id !== productId);
-    updateCartCount();
-    renderCart();
 }
 
 function showNotification(message) {
@@ -879,6 +901,11 @@ function openCheckout() {
         return;
     }
 
+    if (!cart || cart.length === 0) {
+        showNotification('Your cart is empty. Please add an item first.');
+        return;
+    }
+
     appliedCoupon = null;
     document.getElementById('couponCodeInput').value = '';
     document.getElementById('couponMessage').textContent = '';
@@ -1002,6 +1029,7 @@ function placeOrder() {
         name, phone, address, pincode,
         paymentMethod,
         couponCode: appliedCoupon ? appliedCoupon.code : '',
+        items: cart.map(i => ({ productId: i.id, quantity: i.quantity })),
     };
 
     const placeBtn = document.getElementById('placeOrderBtn');
@@ -1057,26 +1085,18 @@ function placeOrder() {
                     ondismiss: function () {
                         apiFetch('/api/orders/razorpay/cancel', { method: 'POST', body: JSON.stringify({ orderNumber: rpData.orderNumber }) }).catch(() => {});
                         resetButton();
-                        // No navigation here — the customer just closed the widget and is
-                        // still on the checkout modal, free to try again immediately.
                         errEl.textContent = 'Payment cancelled.';
                     },
                 },
             });
             rzp.open();
-            // Bug fix: do NOT reset the button here. The widget is now open
-            // and payment is in progress — re-enabling "Place Order" at this
-            // point let a customer click it again and spin up a second
-            // pending order (decrementing stock again) while the first
-            // payment was still being completed. The button is correctly
-            // reset in modal.ondismiss and in the handler's .catch below,
-            // which cover every way this flow can end.
         })
         .catch(err => { errEl.textContent = err.message; resetButton(); });
 }
 
 function onOrderPlaced(order) {
     cart = [];
+    saveLocalCart();
     appliedCoupon = null;
     updateCartCount();
     closeCheckout();
@@ -1144,7 +1164,18 @@ async function checkCustomerSession() {
 
 async function loadServerCart() {
     try {
-        cart = await apiFetch('/api/cart');
+        const serverItems = await apiFetch('/api/cart');
+        if (Array.isArray(serverItems) && serverItems.length > 0) {
+            cart = serverItems;
+            saveLocalCart();
+        } else if (cart.length > 0) {
+            // Sync local items to server
+            const guestItems = cart.map(item => ({ productId: item.id, quantity: item.quantity }));
+            apiFetch('/api/cart/merge', {
+                method: 'POST',
+                body: JSON.stringify({ items: guestItems }),
+            }).catch(() => {});
+        }
     } catch (err) {
         console.error('Failed to load cart:', err);
     }
