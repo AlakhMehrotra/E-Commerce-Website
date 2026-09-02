@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS products (
     badge         TEXT DEFAULT '',
     emoji         TEXT DEFAULT '🌸',
     description   TEXT DEFAULT '',
-    image_data    TEXT,                 -- base64 data URL (Phase 1 storage)
+    image_data    TEXT,                 -- base64 data URL (Phase 1 storage / primary cover photo)
+    images        TEXT DEFAULT '[]',    -- JSON array of base64 data URLs / image URLs for multiple photos
     fabric        TEXT DEFAULT 'Pure Banarasi Silk',
     color         TEXT DEFAULT '',
     stock         INTEGER NOT NULL DEFAULT 25,

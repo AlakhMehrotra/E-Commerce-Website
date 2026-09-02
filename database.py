@@ -8,6 +8,7 @@ server-persisted cart, and wishlist. Nothing in Phase 1 (products, admin
 auth) was modified — only additions below.
 """
 import sqlite3
+import json
 import os
 import re
 import time
@@ -142,6 +143,8 @@ def init_db():
     # CHANGE: one-time return/replacement allowance flag on an existing
     # orders table (see schema.sql for the full comment).
     _ensure_column(conn, "orders", "replacement_used", "INTEGER NOT NULL DEFAULT 0")
+    # Multi-image support for products
+    _ensure_column(conn, "products", "images", "TEXT DEFAULT '[]'")
     conn.commit()
 
     # Seed products only if the table is empty
@@ -183,7 +186,23 @@ def init_db():
 
 
 def row_to_product(row):
-    """Convert a DB row into the JSON shape the frontend (saree.js) expects."""
+    """Convert a DB row into the JSON shape the frontend (saree.js / admin.html) expects."""
+    raw_images = row["images"] if "images" in row.keys() else None
+    images_list = []
+    if raw_images:
+        try:
+            parsed = json.loads(raw_images)
+            if isinstance(parsed, list):
+                images_list = [img for img in parsed if img]
+        except Exception:
+            images_list = []
+
+    # Fallback to image_data if images list is empty
+    if not images_list and row["image_data"]:
+        images_list = [row["image_data"]]
+
+    primary_image = images_list[0] if images_list else (row["image_data"] or None)
+
     return {
         "id": row["id"],
         "name": row["name"],
@@ -192,7 +211,8 @@ def row_to_product(row):
         "badge": row["badge"] or "",
         "emoji": row["emoji"] or "🌸",
         "description": row["description"] or "",
-        "imageData": row["image_data"],
+        "imageData": primary_image,
+        "images": images_list,
         "fabric": row["fabric"] or "Pure Banarasi Silk",
         "color": row["color"] or "",
         "stock": row["stock"],

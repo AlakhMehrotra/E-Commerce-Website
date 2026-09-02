@@ -47,7 +47,7 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # Security fix: only send the session cookie over HTTPS. Set
 # JEEVANI_INSECURE_COOKIE=true only for local http://localhost development.
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("JEEVANI_INSECURE_COOKIE", "false").lower() != "true"
-app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8 MB request cap (covers 5MB image + JSON overhead)
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MB request cap (supports multiple photos + JSON overhead)
 
 # Phase 4 CHANGE: SMTP email — order confirmation, shipping confirmation,
 # password reset. See README.md for the MAIL_* environment variables.
@@ -393,16 +393,47 @@ def validate_product_payload(data, partial=False):
         except (TypeError, ValueError):
             return None, "Stock must be a valid number."
 
-    if "imageData" in data:
+    # Support both `images` (array of photos) and legacy `imageData` (single photo)
+    images_list = None
+    if "images" in data:
+        raw_images = data.get("images")
+        if raw_images is not None:
+            if not isinstance(raw_images, list):
+                return None, "Images must be provided as a list."
+            if len(raw_images) > 10:
+                return None, "Maximum 10 photos allowed per product."
+            validated_images = []
+            for idx, img in enumerate(raw_images):
+                if not isinstance(img, str) or not img.strip():
+                    continue
+                img_str = img.strip()
+                if img_str.startswith("http://") or img_str.startswith("https://") or img_str.startswith("/"):
+                    validated_images.append(img_str)
+                elif re.match(r"^data:image/(png|jpe?g|webp|gif);base64,", img_str):
+                    approx_bytes = len(img_str) * 3 / 4
+                    if approx_bytes > MAX_IMAGE_BYTES:
+                        return None, f"Photo #{idx+1} is too large. Please choose files under 5 MB."
+                    validated_images.append(img_str)
+                else:
+                    return None, f"Photo #{idx+1} must be a valid PNG, JPG, WEBP, GIF, or image URL."
+            images_list = validated_images
+            cleaned["images"] = json.dumps(images_list)
+            cleaned["image_data"] = images_list[0] if images_list else None
+
+    if "imageData" in data and images_list is None:
         image_data = data.get("imageData") or ""
         if image_data:
-            if not re.match(r"^data:image/(png|jpe?g|webp|gif);base64,", image_data):
-                return None, "Image must be a valid PNG, JPG, WEBP, or GIF upload."
-            # Rough size check from base64 length (base64 inflates size ~33%)
-            approx_bytes = len(image_data) * 3 / 4
-            if approx_bytes > MAX_IMAGE_BYTES:
-                return None, "Image is too large. Please choose a file under 5 MB."
-        cleaned["image_data"] = image_data or None
+            if not (image_data.startswith("http://") or image_data.startswith("https://") or image_data.startswith("/") or re.match(r"^data:image/(png|jpe?g|webp|gif);base64,", image_data)):
+                return None, "Image must be a valid PNG, JPG, WEBP, GIF, or URL."
+            if not (image_data.startswith("http://") or image_data.startswith("https://") or image_data.startswith("/")):
+                approx_bytes = len(image_data) * 3 / 4
+                if approx_bytes > MAX_IMAGE_BYTES:
+                    return None, "Image is too large. Please choose a file under 5 MB."
+            cleaned["image_data"] = image_data
+            cleaned["images"] = json.dumps([image_data])
+        else:
+            cleaned["image_data"] = None
+            cleaned["images"] = "[]"
 
     for flag in ("featured", "bestseller", "newArrival"):
         if flag in data:
@@ -856,16 +887,17 @@ def admin_create_product():
     cleaned.setdefault("color", "")
     cleaned.setdefault("stock", 25)
     cleaned.setdefault("image_data", None)
+    cleaned.setdefault("images", "[]")
 
     conn = db.get_db()
     cur = conn.execute(
         """INSERT INTO products
-           (name, category, price, badge, emoji, description, image_data, fabric, color, stock,
+           (name, category, price, badge, emoji, description, image_data, images, fabric, color, stock,
             featured, bestseller, new_arrival)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             cleaned["name"], cleaned["category"], cleaned["price"], cleaned["badge"],
-            cleaned["emoji"], cleaned["description"], cleaned["image_data"], cleaned["fabric"],
+            cleaned["emoji"], cleaned["description"], cleaned["image_data"], cleaned["images"], cleaned["fabric"],
             cleaned["color"], cleaned["stock"],
             cleaned.get("featured", 0), cleaned.get("bestseller", 0), cleaned.get("new_arrival", 0),
         ),

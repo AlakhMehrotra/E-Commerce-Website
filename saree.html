@@ -330,7 +330,10 @@
 
         <section class="section">
             <div class="product-detail">
-                <div class="product-image-large" id="productImage"></div>
+                <div class="product-gallery-container">
+                    <div class="product-image-large" id="productImage"></div>
+                    <div class="product-thumbnails-strip" id="productThumbnails"></div>
+                </div>
 
                 <div class="product-content">
                     <h2 id="detailName"></h2>
@@ -1407,18 +1410,19 @@
                         style="width:100%;padding:0.8rem 1rem;border:1px solid var(--dark-cream);border-radius:4px;font-family:inherit;font-size:1rem;background:var(--cream);color:var(--stone);resize:vertical;"></textarea>
                 </div>
 
-                <!-- CHANGE: Image upload field -->
+                <!-- Multiple photos upload field -->
                 <div class="auth-field">
-                    <label>Product Image (optional)</label>
-                    <div class="image-upload-area" id="imageUploadArea">
+                    <label>Product Photos <span id="formPhotosCount" style="font-weight:normal;color:var(--text-muted);">(0/10 photos)</span></label>
+                    <div class="image-upload-area" id="imageUploadArea" style="cursor:pointer;" onclick="document.getElementById('formImage').click()">
                         <div id="imagePreview" class="image-preview-placeholder">
-                            <span style="font-size:2.5rem;">📷</span>
-                            <p>Click to upload or drag & drop</p>
-                            <p style="font-size:0.85rem; color: var(--stone-soft);">JPG, PNG, WEBP — max 5 MB</p>
+                            <span style="font-size:2.5rem;">📸</span>
+                            <p>Click to choose photos or drag & drop</p>
+                            <p style="font-size:0.85rem; color: var(--stone-soft);">Select multiple photos (JPG, PNG, WEBP — max 5 MB each, up to 10)</p>
                         </div>
-                        <input type="file" id="formImage" accept="image/*" style="display:none;"
+                        <input type="file" id="formImage" accept="image/*" multiple style="display:none;"
                             onchange="previewUploadedImage(event)">
                     </div>
+                    <div id="formPhotosPreviewGrid" class="form-photos-preview-grid"></div>
                     <input type="hidden" id="formImageData">
                 </div>
 

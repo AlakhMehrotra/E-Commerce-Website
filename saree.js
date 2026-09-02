@@ -376,12 +376,7 @@ function openProduct(productId, pushUrl = true) {
     document.getElementById('detailDescription').textContent = product.description || 'Pure Banarasi Silk • Handwoven';
     document.getElementById('detailPrice').textContent = `₹${product.price.toLocaleString('en-IN')}`;
 
-    if (product.imageData) {
-        document.getElementById('productImage').innerHTML =
-            `<img src="${product.imageData}" alt="${product.name}" style="width:100%;height:100%;object-fit:cover;border-radius:12px;">`;
-    } else {
-        document.getElementById('productImage').innerHTML = product.emoji;
-    }
+    renderProductGallery(product);
 
     document.getElementById('detailCartBtn').onclick = () => addToCart(product.id);
     document.getElementById('buyNowBtn').onclick = () => buyNow(product.id);
@@ -408,6 +403,80 @@ function openProduct(productId, pushUrl = true) {
         document.title = `${product.name} — ₹${product.price.toLocaleString('en-IN')} | Shri Jeewani Saree Center`;
     }
     trackPageView(product.slug ? `/product/${product.slug}` : `/product/${product.id}`, product.id);
+}
+
+// ─── Multi-Photo Gallery for Product Detail ────────────────────────────
+let currentGalleryIndex = 0;
+let currentGalleryImages = [];
+
+function renderProductGallery(product) {
+    const imgContainer = document.getElementById('productImage');
+    const thumbContainer = document.getElementById('productThumbnails');
+    if (!imgContainer) return;
+
+    const images = (product.images && product.images.length > 0)
+        ? product.images
+        : (product.imageData ? [product.imageData] : []);
+
+    currentGalleryImages = images;
+    currentGalleryIndex = 0;
+
+    if (images.length === 0) {
+        imgContainer.innerHTML = `<span style="font-size:6rem;">${product.emoji || '🌸'}</span>`;
+        if (thumbContainer) {
+            thumbContainer.style.display = 'none';
+            thumbContainer.innerHTML = '';
+        }
+        return;
+    }
+
+    imgContainer.innerHTML = `
+        <img src="${images[0]}" alt="${escapeHtml(product.name)}" id="mainGalleryImg">
+        ${images.length > 1 ? `
+            <button class="gallery-nav-btn gallery-nav-prev" onclick="changeGalleryPhoto(-1, event)" aria-label="Previous photo">&#10094;</button>
+            <button class="gallery-nav-btn gallery-nav-next" onclick="changeGalleryPhoto(1, event)" aria-label="Next photo">&#10095;</button>
+            <span class="photo-count-chip">${1} / ${images.length}</span>
+        ` : ''}
+    `;
+
+    if (thumbContainer) {
+        if (images.length > 1) {
+            thumbContainer.style.display = 'flex';
+            thumbContainer.innerHTML = images.map((src, i) => `
+                <div class="product-thumbnail-item ${i === 0 ? 'active' : ''}" onclick="selectGalleryPhoto(${i})">
+                    <img src="${src}" alt="Thumb ${i + 1}">
+                </div>
+            `).join('');
+        } else {
+            thumbContainer.style.display = 'none';
+            thumbContainer.innerHTML = '';
+        }
+    }
+}
+
+function selectGalleryPhoto(index) {
+    if (!currentGalleryImages || currentGalleryImages.length === 0) return;
+    currentGalleryIndex = index;
+    const img = document.getElementById('mainGalleryImg');
+    if (img) img.src = currentGalleryImages[currentGalleryIndex];
+    const counter = document.querySelector('.photo-count-chip');
+    if (counter) counter.textContent = `${currentGalleryIndex + 1} / ${currentGalleryImages.length}`;
+
+    const thumbContainer = document.getElementById('productThumbnails');
+    if (thumbContainer) {
+        const thumbs = thumbContainer.querySelectorAll('.product-thumbnail-item');
+        thumbs.forEach((th, i) => th.classList.toggle('active', i === currentGalleryIndex));
+    }
+}
+
+function changeGalleryPhoto(delta, event) {
+    if (event) {
+        event.stopPropagation();
+        event.preventDefault();
+    }
+    if (!currentGalleryImages || currentGalleryImages.length <= 1) return;
+    const newIdx = (currentGalleryIndex + delta + currentGalleryImages.length) % currentGalleryImages.length;
+    selectGalleryPhoto(newIdx);
 }
 
 // CHANGE (Phase 5): Back/Forward button support for /product/<slug> URLs.
@@ -2833,15 +2902,70 @@ function openAddProductModal() {
     document.getElementById('formNewArrival').checked = false;
     document.getElementById('formDescription').value = '';
     document.getElementById('formImageData').value = '';
-    document.getElementById('imagePreview').innerHTML = `
-        <span style="font-size:2.5rem;">📷</span>
-        <p>Click to upload or drag & drop</p>
-        <p style="font-size:0.85rem; color: var(--stone-soft);">JPG, PNG, WEBP — max 5 MB</p>`;
+    modalUploadedPhotos = [];
+    renderModalPhotos();
     document.getElementById('productFormError').style.display = 'none';
     document.getElementById('productFormModal').classList.add('active');
 
     document.getElementById('imageUploadArea').onclick = () =>
         document.getElementById('formImage').click();
+}
+
+let modalUploadedPhotos = [];
+
+function renderModalPhotos() {
+    const grid = document.getElementById('formPhotosPreviewGrid');
+    const countLabel = document.getElementById('formPhotosCount');
+    const previewBox = document.getElementById('imagePreview');
+
+    if (countLabel) {
+        countLabel.textContent = `(${modalUploadedPhotos.length}/10 photos)`;
+    }
+
+    if (previewBox) {
+        if (modalUploadedPhotos.length > 0) {
+            previewBox.innerHTML = `
+                <span style="font-size:1.8rem;">📸</span>
+                <p style="margin:2px 0;">Click to add more photos</p>
+                <p style="font-size:0.8rem; color: var(--stone-soft); margin:0;">${modalUploadedPhotos.length} photo(s) selected</p>`;
+        } else {
+            previewBox.innerHTML = `
+                <span style="font-size:2.5rem;">📸</span>
+                <p>Click to choose photos or drag & drop</p>
+                <p style="font-size:0.85rem; color: var(--stone-soft);">Select multiple photos (JPG, PNG, WEBP — max 5 MB each, up to 10)</p>`;
+        }
+    }
+
+    if (!grid) return;
+
+    if (modalUploadedPhotos.length === 0) {
+        grid.innerHTML = '';
+        return;
+    }
+
+    grid.innerHTML = modalUploadedPhotos.map((src, idx) => `
+        <div class="form-photo-card ${idx === 0 ? 'is-cover' : ''}">
+            <img src="${src}" alt="Photo ${idx + 1}">
+            ${idx === 0 ? '<span class="form-photo-cover-badge">★ Cover</span>' : ''}
+            <button type="button" class="form-photo-delete-btn" onclick="removeModalPhoto(${idx}, event)" title="Remove photo">✕</button>
+            ${idx > 0 ? `<button type="button" class="form-photo-cover-btn" onclick="setModalCoverPhoto(${idx}, event)">Set Cover</button>` : ''}
+        </div>
+    `).join('');
+}
+
+function removeModalPhoto(index, event) {
+    if (event) event.stopPropagation();
+    modalUploadedPhotos.splice(index, 1);
+    renderModalPhotos();
+}
+
+function setModalCoverPhoto(index, event) {
+    if (event) event.stopPropagation();
+    if (index > 0 && index < modalUploadedPhotos.length) {
+        const [target] = modalUploadedPhotos.splice(index, 1);
+        modalUploadedPhotos.unshift(target);
+        renderModalPhotos();
+    }
 }
 
 function openEditProductModal(productId) {
@@ -2860,17 +2984,13 @@ function openEditProductModal(productId) {
     document.getElementById('formBestseller').checked = !!p.bestseller;
     document.getElementById('formNewArrival').checked = !!p.newArrival;
     document.getElementById('formDescription').value = p.description || '';
-    document.getElementById('formImageData').value = p.imageData || '';
     document.getElementById('productFormError').style.display = 'none';
 
-    if (p.imageData) {
-        document.getElementById('imagePreview').innerHTML =
-            `<img src="${p.imageData}" alt="preview" style="max-width:100%;max-height:160px;border-radius:6px;object-fit:contain;">`;
-    } else {
-        document.getElementById('imagePreview').innerHTML = `
-            <span style="font-size:2.5rem;">${p.emoji}</span>
-            <p>Click to replace image</p>`;
-    }
+    modalUploadedPhotos = (p.images && p.images.length > 0)
+        ? [...p.images]
+        : (p.imageData ? [p.imageData] : []);
+
+    renderModalPhotos();
 
     document.getElementById('productFormModal').classList.add('active');
     document.getElementById('imageUploadArea').onclick = () =>
@@ -2921,23 +3041,38 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ─── Image Upload Preview ───────────────────────────────────────────────
-function previewUploadedImage(event) {
-    const file = event.target.files[0];
-    if (!file) return;
+async function previewUploadedImage(event) {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-        alert('Image is too large. Please choose a file under 5 MB.');
+    const remaining = 10 - modalUploadedPhotos.length;
+    if (remaining <= 0) {
+        alert('Maximum of 10 photos allowed per product.');
+        event.target.value = '';
         return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const dataUrl = e.target.result;
-        document.getElementById('formImageData').value = dataUrl;
-        document.getElementById('imagePreview').innerHTML =
-            `<img src="${dataUrl}" alt="preview" style="max-width:100%;max-height:160px;border-radius:6px;object-fit:contain;">`;
-    };
-    reader.readAsDataURL(file);
+    const filesToProcess = files.slice(0, remaining);
+    for (const file of filesToProcess) {
+        if (file.size > 5 * 1024 * 1024) {
+            alert(`"${file.name}" is over 5 MB. Please choose images under 5 MB.`);
+            continue;
+        }
+        try {
+            const dataUrl = await new Promise((res, rej) => {
+                const reader = new FileReader();
+                reader.onload = () => res(reader.result);
+                reader.onerror = rej;
+                reader.readAsDataURL(file);
+            });
+            modalUploadedPhotos.push(dataUrl);
+        } catch (e) {
+            console.error('Failed to read image', e);
+        }
+    }
+
+    renderModalPhotos();
+    event.target.value = '';
 }
 
 // ─── Save Product (Add or Update) ──────────────────────────────────────
@@ -2952,7 +3087,6 @@ async function saveProduct() {
     const bestseller  = document.getElementById('formBestseller').checked;
     const newArrival  = document.getElementById('formNewArrival').checked;
     const description = document.getElementById('formDescription').value.trim();
-    const imageData   = document.getElementById('formImageData').value;
     const editId      = document.getElementById('editProductId').value;
 
     errEl.style.display = 'none';
@@ -2970,7 +3104,19 @@ async function saveProduct() {
         return;
     }
 
-    const payload = { name, category, price, badge, emoji, featured, bestseller, newArrival, description, imageData };
+    const payload = {
+        name,
+        category,
+        price,
+        badge,
+        emoji,
+        featured,
+        bestseller,
+        newArrival,
+        description,
+        images: modalUploadedPhotos,
+        imageData: modalUploadedPhotos[0] || null
+    };
 
     try {
         if (editId) {

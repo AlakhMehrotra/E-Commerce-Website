@@ -304,16 +304,141 @@
             grid-column: 1 / -1;
         }
 
-        .image-preview {
-            width: 100%;
-            max-height: 160px;
-            object-fit: contain;
-            border: 1px dashed var(--gold);
-            border-radius: 8px;
-            padding: 6px;
-            margin-top: 6px;
-            display: none;
+        /* Multi-Image Upload Styles */
+        .image-upload-box {
+            border: 2px dashed var(--gold);
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
             background: #fffdf8;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .image-upload-box:hover, .image-upload-box.dragover {
+            border-color: var(--maroon);
+            background: #fff9ed;
+        }
+        .image-upload-box-icon {
+            font-size: 32px;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .image-upload-box-text {
+            font-weight: 600;
+            color: var(--maroon-dark);
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+        .image-upload-box-hint {
+            font-size: 12px;
+            color: #8c7b66;
+        }
+        .photos-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .photo-preview-card {
+            position: relative;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--gold-light);
+            background: #fff;
+            aspect-ratio: 1;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .photo-preview-card.is-cover {
+            border: 2px solid var(--gold);
+            box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.3);
+        }
+        .photo-preview-card img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .photo-cover-badge {
+            position: absolute;
+            top: 5px;
+            left: 5px;
+            background: var(--gold);
+            color: #fff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 5px;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .photo-delete-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(176, 0, 32, 0.85);
+            color: #fff;
+            border: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            transition: background 0.15s;
+        }
+        .photo-delete-btn:hover {
+            background: #b00020;
+        }
+        .photo-set-cover-btn {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            right: 5px;
+            background: rgba(0, 0, 0, 0.65);
+            color: #fff;
+            border: none;
+            font-size: 9px;
+            font-weight: 600;
+            padding: 3px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            backdrop-filter: blur(2px);
+            transition: background 0.15s;
+        }
+        .photo-set-cover-btn:hover {
+            background: var(--maroon);
+        }
+        .photos-count-indicator {
+            font-size: 12px;
+            color: var(--maroon-dark);
+            margin-top: 8px;
+            font-weight: 600;
+        }
+        .product {
+            position: relative;
+        }
+        .product-photo-count {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: rgba(0,0,0,0.65);
+            color: #fff;
+            font-size: 11px;
+            padding: 2px 7px;
+            border-radius: 12px;
+            backdrop-filter: blur(2px);
+            font-weight: 600;
+            z-index: 2;
         }
 
         .toolbar {
@@ -1039,9 +1164,14 @@
                         </div>
 
                         <div class="full">
-                            <label for="image">Product Image</label>
-                            <input type="file" id="image" accept="image/*" onchange="previewImage()">
-                            <img id="imagePreview" class="image-preview">
+                            <label>Product Photos <span id="photosCountLabel" style="font-weight:normal;color:#8c7b66;">(0/10 photos)</span></label>
+                            <div class="image-upload-box" id="uploadDropzone" onclick="document.getElementById('imageInput').click()">
+                                <span class="image-upload-box-icon">📸</span>
+                                <div class="image-upload-box-text">Click to choose photos or drag & drop</div>
+                                <div class="image-upload-box-hint">Select multiple images (PNG, JPG, WEBP — max 5 MB each, up to 10 photos)</div>
+                                <input type="file" id="imageInput" accept="image/*" multiple style="display:none;" onchange="handleFilesSelected(event)">
+                            </div>
+                            <div id="photosPreviewGrid" class="photos-preview-grid"></div>
                         </div>
 
                     </div>
@@ -1383,38 +1513,135 @@
             document.getElementById("username").focus();
         });
 
-        // ---------- IMAGE PREVIEW ----------
+        // ---------- MULTI-IMAGE STATE & PREVIEW ----------
+        let uploadedPhotos = []; // array of base64 data URLs
 
-        function previewImage() {
+        function renderPhotosPreview() {
+            const grid = document.getElementById("photosPreviewGrid");
+            const countLabel = document.getElementById("photosCountLabel");
+            if (countLabel) {
+                countLabel.textContent = `(${uploadedPhotos.length}/10 photos)`;
+            }
 
-            let imageInput = document.getElementById("image");
-            let preview = document.getElementById("imagePreview");
+            if (!grid) return;
 
-            if (imageInput.files.length === 0) {
-                preview.style.display = "none";
+            if (uploadedPhotos.length === 0) {
+                grid.innerHTML = "";
                 return;
             }
 
-            let reader = new FileReader();
-
-            reader.onload = function () {
-                preview.src = reader.result;
-                preview.style.display = "block";
-            };
-
-            reader.readAsDataURL(imageInput.files[0]);
-
+            grid.innerHTML = uploadedPhotos.map((src, idx) => `
+                <div class="photo-preview-card ${idx === 0 ? 'is-cover' : ''}">
+                    <img src="${src}" alt="Photo ${idx + 1}">
+                    ${idx === 0 ? '<span class="photo-cover-badge">★ Cover</span>' : ''}
+                    <button type="button" class="photo-delete-btn" onclick="removePhoto(${idx}, event)" title="Remove photo">✕</button>
+                    ${idx > 0 ? `<button type="button" class="photo-set-cover-btn" onclick="setCoverPhoto(${idx}, event)">Set Cover</button>` : ''}
+                </div>
+            `).join("");
         }
+
+        function removePhoto(index, event) {
+            if (event) event.stopPropagation();
+            uploadedPhotos.splice(index, 1);
+            renderPhotosPreview();
+        }
+
+        function setCoverPhoto(index, event) {
+            if (event) event.stopPropagation();
+            if (index > 0 && index < uploadedPhotos.length) {
+                const [target] = uploadedPhotos.splice(index, 1);
+                uploadedPhotos.unshift(target);
+                renderPhotosPreview();
+            }
+        }
+
+        async function handleFilesSelected(event) {
+            const files = Array.from(event.target.files || []);
+            await processSelectedFiles(files);
+            event.target.value = "";
+        }
+
+        async function processSelectedFiles(files) {
+            const errorBox = document.getElementById("formError");
+            errorBox.textContent = "";
+
+            if (!files || files.length === 0) return;
+
+            const remainingSlots = 10 - uploadedPhotos.length;
+            if (remainingSlots <= 0) {
+                errorBox.textContent = "Maximum of 10 photos allowed per product.";
+                return;
+            }
+
+            const filesToProcess = files.slice(0, remainingSlots);
+            if (files.length > remainingSlots) {
+                errorBox.textContent = `Only added first ${remainingSlots} photos (maximum 10 photos allowed).`;
+            }
+
+            for (const file of filesToProcess) {
+                if (!file.type.startsWith("image/")) {
+                    errorBox.textContent = `"${file.name}" is not a supported image file.`;
+                    continue;
+                }
+                if (file.size > 5 * 1024 * 1024) {
+                    errorBox.textContent = `"${file.name}" is over 5 MB. Please choose images under 5 MB.`;
+                    continue;
+                }
+                try {
+                    const dataUrl = await readFileAsDataURL(file);
+                    uploadedPhotos.push(dataUrl);
+                } catch (e) {
+                    console.error("Failed to read image file", e);
+                }
+            }
+
+            renderPhotosPreview();
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // Setup Drag and Drop on dropzone
+        document.addEventListener("DOMContentLoaded", () => {
+            const dropzone = document.getElementById("uploadDropzone");
+            if (!dropzone) return;
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.add('dragover');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropzone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dropzone.classList.remove('dragover');
+                }, false);
+            });
+
+            dropzone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt ? Array.from(dt.files) : [];
+                processSelectedFiles(files);
+            }, false);
+        });
 
         // ---------- ADD PRODUCT ----------
 
-        function addProduct() {
-
+        async function addProduct() {
             let name = document.getElementById("name").value.trim();
             let price = document.getElementById("price").value;
             let category = document.getElementById("category").value;
             let description = document.getElementById("description").value.trim();
-            let imageInput = document.getElementById("image");
             let errorBox = document.getElementById("formError");
 
             errorBox.textContent = "";
@@ -1429,56 +1656,42 @@
                 return;
             }
 
-            if (imageInput.files.length === 0) {
-                errorBox.textContent = "Please upload an image.";
+            if (uploadedPhotos.length === 0) {
+                errorBox.textContent = "Please upload at least one product photo.";
                 return;
             }
 
-            if (imageInput.files[0].size > 5 * 1024 * 1024) {
-                errorBox.textContent = "Image is too large. Please choose a file under 5 MB.";
+            const categoryLower = category.toLowerCase();
+            const apiCategory = ['bridal', 'festive', 'classic', 'contemporary'].includes(categoryLower)
+                ? categoryLower
+                : 'classic';
+
+            const photoCount = uploadedPhotos.length;
+
+            try {
+                await apiFetch('/api/admin/products', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        name: name,
+                        price: Number(price),
+                        category: apiCategory,
+                        description: description,
+                        images: uploadedPhotos,
+                        imageData: uploadedPhotos[0]
+                    })
+                });
+            } catch (err) {
+                errorBox.textContent = err.message || "Failed to add product.";
                 return;
             }
 
-            let reader = new FileReader();
+            await displayProducts();
+            resetForm();
 
-            reader.onload = async function () {
-
-                const categoryLower = category.toLowerCase();
-                // The product API validates against bridal/festive/classic/contemporary.
-                // "Suit" (a legacy option in this form) maps to "classic" so the save
-                // never silently fails for that one dropdown option.
-                const apiCategory = ['bridal', 'festive', 'classic', 'contemporary'].includes(categoryLower)
-                    ? categoryLower
-                    : 'classic';
-
-                try {
-                    await apiFetch('/api/admin/products', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            name: name,
-                            price: Number(price),
-                            category: apiCategory,
-                            description: description,
-                            imageData: reader.result
-                        })
-                    });
-                } catch (err) {
-                    errorBox.textContent = err.message || "Failed to add product.";
-                    return;
-                }
-
-                await displayProducts();
-                resetForm();
-
-                // Ask if they want to go back to the main site
-                if (confirm("Product added successfully! ✅\n\nGo back to the main site to see it in the collection?")) {
-                    window.location.href = "saree.html#collections";
-                }
-
-            };
-
-            reader.readAsDataURL(imageInput.files[0]);
-
+            // Ask if they want to go back to the main site
+            if (confirm(`Product added successfully with ${photoCount} photo(s)! ✅\n\nGo back to the main site to see it in the collection?`)) {
+                window.location.href = "saree.html#collections";
+            }
         }
 
         function resetForm() {
@@ -1486,14 +1699,15 @@
             document.getElementById("price").value = "";
             document.getElementById("category").selectedIndex = 0;
             document.getElementById("description").value = "";
-            document.getElementById("image").value = "";
-            document.getElementById("imagePreview").style.display = "none";
+            const input = document.getElementById("imageInput");
+            if (input) input.value = "";
+            uploadedPhotos = [];
+            renderPhotosPreview();
         }
 
         // ---------- DELETE PRODUCT ----------
 
         async function deleteProduct(productId) {
-
             if (!confirm("Delete this product?")) return;
 
             try {
@@ -1504,7 +1718,6 @@
             }
 
             await displayProducts();
-
         }
 
         async function displayProducts() {
@@ -1520,9 +1733,13 @@
 
                 listEl.innerHTML = `
                 <div class="product-list">
-                    ${currentProducts.map(p => `
+                    ${currentProducts.map(p => {
+                        const img = p.imageData || (p.images && p.images[0]) || '';
+                        const photosCount = (p.images && p.images.length > 0) ? p.images.length : (p.imageData ? 1 : 0);
+                        return `
                         <div class="product">
-                            <img src="${escapeHtml(p.imageUrl || '')}" alt="${escapeHtml(p.name)}">
+                            ${photosCount > 1 ? `<span class="product-photo-count">📷 ${photosCount} photos</span>` : ''}
+                            <img src="${escapeHtml(img)}" alt="${escapeHtml(p.name)}">
                             <div class="info">
                                 <h3>${escapeHtml(p.name)}</h3>
                                 <div class="price">₹${p.price}</div>
@@ -1531,7 +1748,8 @@
                             </div>
                             <button class="delete-btn" onclick="deleteProduct(${p.id})">Delete</button>
                         </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             `;
             } catch (err) {
