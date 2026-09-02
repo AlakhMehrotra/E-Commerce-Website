@@ -1000,24 +1000,29 @@ def _issue_stateless_login_otp(row):
     """Generates a fresh 6-digit code, saves to DB if possible (for local/persistent servers),
     and generates a cryptographically signed HMAC token for serverless (Vercel) environments."""
     otp_code = f"{secrets.randbelow(1000000):06d}"
+    user_id = row["id"]
+    email = (row["email"] or "").strip() if ("email" in row.keys() and row["email"]) else ""
+    name = (row["name"] or "").strip() if ("name" in row.keys() and row["name"]) else "Valued Patron"
+
     try:
         conn = db.get_db()
-        db.set_login_otp(conn, row["id"], otp_code)
+        db.set_login_otp(conn, user_id, otp_code)
         conn.commit()
         conn.close()
     except Exception as e:
         app.logger.warning("Could not set login OTP in DB: %s", e)
 
     payload = {
-        "user_id": row["id"],
-        "identifier": row.get("email") or str(row["id"]),
+        "user_id": user_id,
+        "identifier": email or str(user_id),
         "otp_hash": _hash_otp(otp_code),
         "created_at": time.time(),
         "type": "login",
     }
     s = _get_serializer()
     token = s.dumps(payload, salt=OTP_SALT)
-    mailer.send_login_otp_email(row["email"], row["name"], otp_code, db.LOGIN_OTP_TTL_MINUTES)
+    if email:
+        mailer.send_login_otp_email(email, name, otp_code, db.LOGIN_OTP_TTL_MINUTES)
     return token
 
 

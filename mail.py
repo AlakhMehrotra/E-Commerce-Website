@@ -80,11 +80,18 @@ def init_mail(app):
 
 
 def _send_async(app, msg):
-    with app.app_context():
+    if app:
+        with app.app_context():
+            try:
+                mail.send(msg)
+                logger.info("Sent email to %s (async)", msg.recipients)
+            except Exception as exc:  # noqa: BLE001 — never let email failure surface to the customer
+                logger.error("Failed to send email to %s: %s", msg.recipients, exc)
+    else:
         try:
             mail.send(msg)
             logger.info("Sent email to %s (async)", msg.recipients)
-        except Exception as exc:  # noqa: BLE001 — never let email failure surface to the customer
+        except Exception as exc:
             logger.error("Failed to send email to %s: %s", msg.recipients, exc)
 
 
