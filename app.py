@@ -363,7 +363,7 @@ def validate_product_payload(data, partial=False):
     if not partial or "description" in data:
         description = (data.get("description") or "").strip()
         if not description:
-            return None, "Description is required."
+            description = "Pure Banarasi Silk • Handwoven"
         if len(description) > 4000:
             return None, "Description is too long."
         cleaned["description"] = description
