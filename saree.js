@@ -137,6 +137,7 @@ async function loadProducts() {
         products = [];
     }
     renderProducts();
+    renderHomeFlaggedSections();
 }
 
 // CHANGE (Phase 5): homepage promotional banner strip, admin-managed.
@@ -344,7 +345,8 @@ function trackPageView(path, productId = null) {
 // featured/bestseller/newArrival flags set in the admin product form.
 function renderHomeFlaggedSections() {
     const bestsellers = products.filter(p => p.bestseller).slice(0, 8);
-    const newArrivals = products.filter(p => p.newArrival).slice(0, 8);
+    const flaggedArrivals = products.filter(p => p.newArrival);
+    const newArrivals = (flaggedArrivals.length > 0 ? flaggedArrivals : products.slice().reverse()).slice(0, 8);
 
     const bsSection = document.getElementById('bestsellersSectionHome');
     const bsGrid = document.getElementById('bestsellersGridHome');

@@ -1150,17 +1150,39 @@
                         <div>
                             <label for="category">Category</label>
                             <select id="category">
-                                <option>Bridal</option>
-                                <option>Festive</option>
-                                <option>Classic</option>
-                                <option>Contemporary</option>
-                                <option>Suit</option>
+                                <option value="bridal">Bridal</option>
+                                <option value="festive">Festive</option>
+                                <option value="classic">Classic</option>
+                                <option value="contemporary">Contemporary</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label for="badgeSelect">Product Badge</label>
+                            <select id="badgeSelect">
+                                <option value="">None</option>
+                                <option value="NEW">NEW</option>
+                                <option value="BESTSELLER">BESTSELLER</option>
+                                <option value="PREMIUM">PREMIUM</option>
+                                <option value="SALE">SALE</option>
                             </select>
                         </div>
 
                         <div class="full">
                             <label for="description">Description</label>
                             <textarea id="description" placeholder="Product description"></textarea>
+                        </div>
+
+                        <div class="full" style="display:flex; flex-wrap:wrap; gap:16px; padding:12px 14px; background:#faf5eb; border-radius:8px; border:1px solid #ebdcc5;">
+                            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; margin:0;">
+                                <input type="checkbox" id="isNewArrival" checked style="width:auto; margin:0;"> ✨ Show in New Arrivals (Home Page)
+                            </label>
+                            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; margin:0;">
+                                <input type="checkbox" id="isFeatured" checked style="width:auto; margin:0;"> ⭐ Featured Product
+                            </label>
+                            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:600; margin:0;">
+                                <input type="checkbox" id="isBestseller" style="width:auto; margin:0;"> 🔥 Mark as Bestseller
+                            </label>
                         </div>
 
                         <div class="full">
@@ -1667,6 +1689,10 @@
                 : 'classic';
 
             const photoCount = uploadedPhotos.length;
+            const isNewArrival = document.getElementById('isNewArrival') ? document.getElementById('isNewArrival').checked : true;
+            const isFeatured = document.getElementById('isFeatured') ? document.getElementById('isFeatured').checked : false;
+            const isBestseller = document.getElementById('isBestseller') ? document.getElementById('isBestseller').checked : false;
+            const badgeVal = document.getElementById('badgeSelect') ? document.getElementById('badgeSelect').value : '';
 
             try {
                 await apiFetch('/api/admin/products', {
@@ -1677,7 +1703,11 @@
                         category: apiCategory,
                         description: description,
                         images: uploadedPhotos,
-                        imageData: uploadedPhotos[0]
+                        imageData: uploadedPhotos[0],
+                        newArrival: isNewArrival,
+                        featured: isFeatured,
+                        bestseller: isBestseller,
+                        badge: badgeVal
                     })
                 });
             } catch (err) {
@@ -1689,7 +1719,7 @@
             resetForm();
 
             // Ask if they want to go back to the main site
-            if (confirm(`Product added successfully with ${photoCount} photo(s)! ✅\n\nGo back to the main site to see it in the collection?`)) {
+            if (confirm(`Product added successfully with ${photoCount} photo(s)! ✅\n\nGo back to the main site to see it on the page?`)) {
                 window.location.href = "saree.html#collections";
             }
         }
@@ -1698,6 +1728,10 @@
             document.getElementById("name").value = "";
             document.getElementById("price").value = "";
             document.getElementById("category").selectedIndex = 0;
+            if (document.getElementById("badgeSelect")) document.getElementById("badgeSelect").selectedIndex = 0;
+            if (document.getElementById("isNewArrival")) document.getElementById("isNewArrival").checked = true;
+            if (document.getElementById("isFeatured")) document.getElementById("isFeatured").checked = true;
+            if (document.getElementById("isBestseller")) document.getElementById("isBestseller").checked = false;
             document.getElementById("description").value = "";
             const input = document.getElementById("imageInput");
             if (input) input.value = "";
