@@ -145,22 +145,23 @@ p, span, li, label, button { font-family: var(--font-body); }
 
 /* Logo */
 .logo {
-  font-family: var(--font-title);
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 2.5px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
   text-decoration: none;
   cursor: pointer;
+  height: 48px;
+  transition: transform var(--t-fast), opacity var(--t-fast);
 }
-.logo .logo-mark {
-  background: var(--gold-gradient);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+.logo:hover {
+  transform: translateY(-1px);
+  opacity: 0.95;
+}
+.logo-img {
+  height: 38px;
+  max-width: 170px;
+  width: auto;
+  object-fit: contain;
+  display: block;
 }
 
 /* Nav links */
@@ -1105,7 +1106,8 @@ input, textarea, select {
 }
 
 @media (max-width: 520px) {
-  .logo { font-size: 1.05rem; letter-spacing: 1.5px; }
+  .logo { height: 40px; }
+  .logo-img { height: 30px; max-width: 130px; }
   .nav-icons { gap: 0.25rem; }
   .icon-btn { width: 38px; height: 38px; font-size: 1.1rem; }
 
