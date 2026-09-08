@@ -33,7 +33,7 @@ mail = Mail()
 
 MAIL_ENABLED = bool(os.environ.get("MAIL_SERVER"))
 
-STORE_NAME = "Shri Jeewani Saree Center"
+STORE_NAME = "Ssonu's"
 BRAND_COLOR = "#8b1e3f"   # matches the site's crimson/maroon accent
 CREAM = "#faf6f0"
 

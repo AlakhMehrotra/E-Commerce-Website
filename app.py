@@ -144,7 +144,7 @@ VALID_RETURN_REQUEST_STATUSES = {"pending", "approved", "rejected", "completed"}
 # and description per product instead of one generic page for the whole
 # catalogue.
 # ─────────────────────────────────────────────────────────────────────────
-DEFAULT_TITLE = "Shri Jeewani Saree Center - Exquisite Banarasi Silk Sarees"
+DEFAULT_TITLE = "Ssonu's - Exquisite Banarasi Silk Sarees"
 DEFAULT_DESCRIPTION = (
     "Authentic handwoven Banarasi silk sarees from Varanasi — bridal, festive, "
     "classic and contemporary collections, crafted by skilled artisans on the ghats of Kashi."
@@ -235,7 +235,7 @@ def serve_product(slug):
 
     return render_seo_shell(
         f"/product/{slug}",
-        title=f"{product['name']} — {price_str} | Shri Jeewani Saree Center",
+        title=f"{product['name']} — {price_str} | Ssonu's",
         description=f"{description} {price_str} · {product['fabric']}.".strip(),
         og_image=og_image,
         initial_state={"productSlug": slug},
@@ -2790,7 +2790,7 @@ def newsletter_unsubscribe():
     body = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>Unsubscribed</title></head>
     <body style="font-family:Georgia,serif;background:#faf6f0;padding:60px 20px;text-align:center;color:#2b2320;">
       <h2 style="color:#8b1e3f;">{html_lib.escape(message)}</h2>
-      <p><a href="{SITE_URL}/" style="color:#8b1e3f;">Return to Shri Jeewani Saree Center</a></p>
+      <p><a href="{SITE_URL}/" style="color:#8b1e3f;">Return to Ssonu's</a></p>
     </body></html>"""
     return Response(body, mimetype="text/html")
 

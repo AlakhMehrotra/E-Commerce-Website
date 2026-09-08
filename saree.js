@@ -400,7 +400,7 @@ function openProduct(productId, pushUrl = true) {
     // the address bar and tab title correct during in-app navigation too.
     if (product.slug) {
         if (pushUrl) window.history.pushState(null, '', `/product/${product.slug}`);
-        document.title = `${product.name} — ₹${product.price.toLocaleString('en-IN')} | Shri Jeewani Saree Center`;
+        document.title = `${product.name} — ₹${product.price.toLocaleString('en-IN')} | Ssonu's`;
     }
     trackPageView(product.slug ? `/product/${product.slug}` : `/product/${product.id}`, product.id);
 }
@@ -1133,7 +1133,7 @@ function placeOrder() {
                 amount: rpData.amount,
                 currency: rpData.currency,
                 order_id: rpData.razorpayOrderId,
-                name: 'Shri Jeewani Saree Center',
+                name: "Ssonu's",
                 description: `Order ${rpData.orderNumber}`,
                 prefill: { name, contact: phone, email: currentUser.email || '' },
                 theme: { color: '#0F5C56' },
