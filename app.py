@@ -416,9 +416,13 @@ def validate_product_payload(data, partial=False):
                     validated_images.append(img_str)
                 else:
                     return None, f"Photo #{idx+1} must be a valid PNG, JPG, WEBP, GIF, or image URL."
-            images_list = validated_images
-            cleaned["images"] = json.dumps(images_list)
-            cleaned["image_data"] = images_list[0] if images_list else None
+            # FIX: Only treat images_list as 'handled' if it has actual items.
+            # If images is an empty list [], fall through to check imageData as fallback.
+            if validated_images:
+                images_list = validated_images
+                cleaned["images"] = json.dumps(images_list)
+                cleaned["image_data"] = images_list[0]
+            # else: images was [] — do NOT set images_list so imageData fallback runs below
 
     if "imageData" in data and images_list is None:
         image_data = data.get("imageData") or ""
@@ -431,6 +435,7 @@ def validate_product_payload(data, partial=False):
                     return None, "Image is too large. Please choose a file under 5 MB."
             cleaned["image_data"] = image_data
             cleaned["images"] = json.dumps([image_data])
+            images_list = [image_data]  # mark as handled
         else:
             cleaned["image_data"] = None
             cleaned["images"] = "[]"
