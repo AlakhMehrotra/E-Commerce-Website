@@ -6,6 +6,10 @@ deploy anywhere Python + SQLite run.
 Phase 2 CHANGE: added helper functions for customer accounts (users),
 server-persisted cart, and wishlist. Nothing in Phase 1 (products, admin
 auth) was modified — only additions below.
+
+Turso CHANGE: When TURSO_DATABASE_URL + TURSO_AUTH_TOKEN env vars are set,
+we use Turso's libsql cloud database for persistent storage on Vercel.
+Local development automatically falls back to the jeevani.db SQLite file.
 """
 import sqlite3
 import json
@@ -16,6 +20,21 @@ import secrets
 import datetime
 import shutil
 from werkzeug.security import generate_password_hash
+
+# ── Turso / libsql support ─────────────────────────────────────────────────
+# If TURSO_DATABASE_URL is set we connect to the cloud DB; otherwise we fall
+# back to plain sqlite3 so local development is unchanged.
+TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
+USE_TURSO   = bool(TURSO_URL and TURSO_TOKEN)
+
+if USE_TURSO:
+    try:
+        import libsql_experimental as libsql
+        print("[DB] Using Turso cloud database:", TURSO_URL)
+    except ImportError:
+        print("[DB] WARNING: libsql_experimental not installed. Falling back to local SQLite.")
+        USE_TURSO = False
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_PATH = os.path.join(BASE_DIR, "schema.sql")
@@ -77,7 +96,123 @@ SEED_COUPONS = [
 ]
 
 
+class _TursoConnWrapper:
+    """
+    Thin wrapper around a libsql connection that makes it behave like
+    sqlite3: adds .row_factory support and returns dict-like rows.
+    """
+    def __init__(self, raw_conn):
+        self._conn = raw_conn
+
+    # ── Row helpers ──────────────────────────────────────────────────────
+    @staticmethod
+    def _wrap_rows(rows):
+        """Convert libsql Row objects to sqlite3.Row-compatible dicts."""
+        if rows is None:
+            return []
+        result = []
+        for row in rows:
+            if hasattr(row, 'keys'):
+                result.append(row)
+            else:
+                result.append(row)
+        return result
+
+    # ── Public interface (mirrors sqlite3.Connection) ─────────────────────
+    def execute(self, sql, params=()):
+        return _TursoCursorWrapper(self._conn.execute(sql, params))
+
+    def executescript(self, script):
+        # libsql doesn't have executescript; split on ';' and run each statement
+        for stmt in script.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                try:
+                    self._conn.execute(stmt)
+                except Exception as e:
+                    if "already exists" not in str(e):
+                        print(f"[DB] executescript warning: {e}")
+        self.commit()
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        # Turso connections are managed differently — no-op is safe
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.commit()
+
+
+class _TursoCursorWrapper:
+    """Wraps a libsql cursor to expose sqlite3-compatible API."""
+    def __init__(self, cursor):
+        self._cursor = cursor
+        self.lastrowid = getattr(cursor, 'lastrowid', None)
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        return _TursoRowWrapper(row, self._cursor)
+
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        if not rows:
+            return []
+        # Get column names from the cursor if available
+        col_names = []
+        if hasattr(self._cursor, 'description') and self._cursor.description:
+            col_names = [d[0] for d in self._cursor.description]
+        return [_TursoRowWrapper(r, self._cursor, col_names) for r in rows]
+
+    def __iter__(self):
+        return iter(self.fetchall())
+
+
+class _TursoRowWrapper:
+    """Makes libsql rows behave like sqlite3.Row (subscript by name or index)."""
+    def __init__(self, row, cursor, col_names=None):
+        if col_names:
+            self._cols = col_names
+        elif hasattr(cursor, 'description') and cursor.description:
+            self._cols = [d[0] for d in cursor.description]
+        else:
+            self._cols = []
+        # libsql returns rows as tuples or row objects
+        if hasattr(row, '__iter__') and not isinstance(row, str):
+            self._values = list(row)
+        else:
+            self._values = [row]
+        self._dict = dict(zip(self._cols, self._values))
+
+    def keys(self):
+        return list(self._cols)
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._values[key]
+        return self._dict[key]
+
+    def __contains__(self, key):
+        return key in self._dict
+
+    def get(self, key, default=None):
+        return self._dict.get(key, default)
+
+    def __repr__(self):
+        return repr(self._dict)
+
+
 def _connect_db():
+    if USE_TURSO:
+        raw = libsql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+        return _TursoConnWrapper(raw)
+    # Local / non-Vercel: plain sqlite3
     global DB_PATH
     DB_PATH = _get_db_path()
     os.makedirs(os.path.dirname(os.path.abspath(DB_PATH)), exist_ok=True)
@@ -96,11 +231,17 @@ def get_db():
     if not _db_initialized:
         _db_initialized = True
         try:
-            exists = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='products'").fetchone()
+            exists = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='products'"
+            ).fetchone()
             if not exists:
                 init_db()
         except Exception as e:
             print(f"[DB] Auto-init notice: {e}")
+            try:
+                init_db()
+            except Exception as e2:
+                print(f"[DB] Init error: {e2}")
     return conn
 
 
