@@ -10,8 +10,8 @@ Usage:
 """
 import os, sys, sqlite3, json
 
-TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "")
-TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
+TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "libsql://adminpanelfile-alakhmehrotra.aws-ap-south-1.turso.io")
+TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODkzMDk3MTUsImlkIjoiMDFhMDliMmItM2EwMS03ZjQ3LWJmM2UtYTdhOGJlODU5MjA0Iiwia2lkIjoidWRRdHMyQVdCc3lNb3J6Y3dJTEhWczFZNF81TEFzdlB2azB4bE1UUVpYNCIsInJpZCI6ImYwYzAwMTgxLTk4OTItNGQzZS1hYTBiLTViYjJlMzAzMmI1YyJ9.aIfVXf8a2rXL4CQLNARSvDOVZtAJKCAZm9q_C-GP4SSQ08yTP0MAWyGZlRyMIlpKCZq4UsQ5R_C7bz9E2YzzAg")
 
 if not TURSO_URL or not TURSO_TOKEN:
     print("ERROR: Set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN before running.")
@@ -20,7 +20,7 @@ if not TURSO_URL or not TURSO_TOKEN:
 try:
     import libsql_experimental as libsql
 except ImportError:
-    print("ERROR: Run: pip install libsql-experimental==0.0.18")
+    print("ERROR: Run: pip install libsql-experimental==0.0.55")
     sys.exit(1)
 
 LOCAL_DB = os.path.join(os.path.dirname(__file__), "jeevani.db")

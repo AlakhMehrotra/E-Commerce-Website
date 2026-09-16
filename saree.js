@@ -119,7 +119,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             navigateToPage('home');
         }
     } else if (window.location.hash === '#collections') {
-        // If redirected from admin.html with #collections, navigate there
+        // If redirected from admin.html with #collections, navigate there.
+        // ?reload=1 is added by admin.html to force a full page reload so
+        // freshly-added products always appear without browser cache issues.
         navigateToPage('collections');
         window.history.replaceState(null, '', window.location.pathname);
     } else {
