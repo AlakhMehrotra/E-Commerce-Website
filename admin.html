@@ -1535,8 +1535,37 @@
             document.getElementById("username").focus();
         });
 
+        // ---------- CLOUDINARY CONFIG ----------
+        // Loaded once from the server; controls whether images go to Cloudinary
+        // (permanent URL) or are stored as base64 in the database (local fallback).
+        let _cloudinaryConfig = { cloudName: '', uploadPreset: 'jeevani_products', enabled: false };
+
+        async function _loadCloudinaryConfig() {
+            try {
+                const cfg = await apiFetch('/api/config/cloudinary');
+                _cloudinaryConfig = cfg;
+            } catch (e) {
+                console.warn('[Cloudinary] Could not load config, using base64 fallback.', e);
+            }
+        }
+
+        // Upload a single File object to Cloudinary; returns the secure URL string.
+        async function _uploadToCloudinary(file) {
+            const url = `https://api.cloudinary.com/v1_1/${_cloudinaryConfig.cloudName}/image/upload`;
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('upload_preset', _cloudinaryConfig.uploadPreset);
+            const res = await fetch(url, { method: 'POST', body: fd });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.error?.message || `Cloudinary upload failed (${res.status})`);
+            }
+            const data = await res.json();
+            return data.secure_url;
+        }
+
         // ---------- MULTI-IMAGE STATE & PREVIEW ----------
-        let uploadedPhotos = []; // array of base64 data URLs
+        let uploadedPhotos = []; // array of URLs (Cloudinary) or base64 data URLs (fallback)
 
         function renderPhotosPreview() {
             const grid = document.getElementById("photosPreviewGrid");
@@ -1600,6 +1629,14 @@
                 errorBox.textContent = `Only added first ${remainingSlots} photos (maximum 10 photos allowed).`;
             }
 
+            // Show uploading indicator
+            const dropzone = document.getElementById('uploadDropzone');
+            const origText = dropzone ? dropzone.querySelector('.image-upload-box-text')?.textContent : '';
+            if (dropzone) {
+                const textEl = dropzone.querySelector('.image-upload-box-text');
+                if (textEl) textEl.textContent = '⏳ Uploading...';
+            }
+
             for (const file of filesToProcess) {
                 if (!file.type.startsWith("image/")) {
                     errorBox.textContent = `"${file.name}" is not a supported image file.`;
@@ -1610,11 +1647,25 @@
                     continue;
                 }
                 try {
-                    const dataUrl = await readFileAsDataURL(file);
-                    uploadedPhotos.push(dataUrl);
+                    if (_cloudinaryConfig.enabled) {
+                        // ✅ Cloudinary: upload directly from browser → get permanent URL
+                        const secureUrl = await _uploadToCloudinary(file);
+                        uploadedPhotos.push(secureUrl);
+                    } else {
+                        // ⚠️ Fallback: store as base64 (works locally, may hit size limits on Vercel)
+                        const dataUrl = await readFileAsDataURL(file);
+                        uploadedPhotos.push(dataUrl);
+                    }
                 } catch (e) {
-                    console.error("Failed to read image file", e);
+                    console.error("Failed to process image file", e);
+                    errorBox.textContent = `Failed to upload "${file.name}": ${e.message}`;
                 }
+            }
+
+            // Restore dropzone text
+            if (dropzone) {
+                const textEl = dropzone.querySelector('.image-upload-box-text');
+                if (textEl) textEl.textContent = origText || 'Click to choose photos or drag & drop';
             }
 
             renderPhotosPreview();
@@ -1629,8 +1680,11 @@
             });
         }
 
-        // Setup Drag and Drop on dropzone
+        // Setup Drag and Drop on dropzone + load Cloudinary config
         document.addEventListener("DOMContentLoaded", () => {
+            // Load Cloudinary config asynchronously — non-blocking
+            _loadCloudinaryConfig();
+
             const dropzone = document.getElementById("uploadDropzone");
             if (!dropzone) return;
 
@@ -1720,7 +1774,9 @@
 
             // Ask if they want to go back to the main site
             if (confirm(`Product added successfully with ${photoCount} photo(s)! ✅\n\nGo back to the main site to see it on the page?`)) {
-                window.location.href = "saree.html#collections";
+                // Force a full page reload so loadProducts() fetches fresh data
+                // and the new product appears in the collection immediately.
+                window.location.href = "saree.html?reload=1#collections";
             }
         }
 

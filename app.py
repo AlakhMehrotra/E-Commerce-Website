@@ -106,6 +106,13 @@ def login_rate_key(identifier):
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
 RAZORPAY_ENABLED = bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
+
+# Cloudinary — free image CDN for permanent product photo storage on Vercel.
+# Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in your environment.
+# Without these, the admin panel falls back to storing base64 in the database
+# (works locally but hits Vercel's response-size limits for large images).
+CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
+CLOUDINARY_UPLOAD_PRESET = os.environ.get("CLOUDINARY_UPLOAD_PRESET", "jeevani_products")
 VALID_ORDER_STATUSES = {"placed", "shipped", "delivered", "cancelled"}
 
 # CHANGE: Payment-method-based pricing. COD carries a small handling
@@ -738,6 +745,23 @@ def _dispatch_to_shiprocket(order, items, user):
         ship_conn.close()
     except Exception:
         app.logger.exception("Failed to create Shiprocket shipment for order %s", order.get("orderNumber"))
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Cloudinary config — exposes only the public/safe values needed by the
+# admin panel to upload images directly from the browser to Cloudinary.
+# The API secret is never sent to the client.
+# ─────────────────────────────────────────────────────────────────────────
+@app.route("/api/config/cloudinary", methods=["GET"])
+def cloudinary_config():
+    """Return the Cloudinary cloud name and unsigned upload preset.
+    Returns empty strings when Cloudinary is not configured so the admin
+    panel gracefully falls back to base64 storage."""
+    return jsonify({
+        "cloudName": CLOUDINARY_CLOUD_NAME,
+        "uploadPreset": CLOUDINARY_UPLOAD_PRESET,
+        "enabled": bool(CLOUDINARY_CLOUD_NAME),
+    })
 
 
 # ─────────────────────────────────────────────────────────────────────────
