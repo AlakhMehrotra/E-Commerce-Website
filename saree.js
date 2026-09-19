@@ -572,8 +572,9 @@ function renderRecentlyViewed(gridId, sectionId, excludeId = null) {
 // CHANGE (Phase 2): shared card markup so Related Products and Recently
 // Viewed render identically to the main grid without duplicating HTML.
 function buildProductCard(product) {
+    const safeName = escapeHtml(product.name);
     const imgContent = product.imageData
-        ? `<img src="${product.imageData}" alt="${product.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px 8px 0 0;">`
+        ? `<img src="${product.imageData}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;border-radius:8px 8px 0 0;">`
         : product.emoji;
     const isWishlisted = wishlistIds.has(product.id);
     return `
@@ -582,12 +583,12 @@ function buildProductCard(product) {
             <button class="wishlist-toggle${isWishlisted ? ' active' : ''}" data-product-id="${product.id}"
                 onclick="event.stopPropagation(); toggleWishlist(${product.id})" title="${isWishlisted ? 'Remove from wishlist' : 'Add to wishlist'}">${isWishlisted ? '♥' : '♡'}</button>
             ${imgContent}
-            ${product.badge ? `<div class="product-badge">${product.badge}</div>` : ''}
+            ${product.badge ? `<div class="product-badge">${escapeHtml(product.badge)}</div>` : ''}
         </div>
         <div class="product-info" onclick="openProduct(${product.id})">
-            <h3 class="product-name">${product.name}</h3>
-            <p class="product-details">Pure Banarasi Silk • Handwoven</p>
-            <p class="product-price">₹${product.price.toLocaleString('en-IN')}</p>
+            <h3 class="product-name">${safeName}</h3>
+            <p class="product-details">${escapeHtml(product.fabric || 'Pure Banarasi Silk')} • Handwoven</p>
+            <p class="product-price">₹${Number(product.price).toLocaleString('en-IN')}</p>
             <button class="add-to-cart" onclick="event.stopPropagation(); addToCart(${product.id})">Add to Cart</button>
             <button class="checkout-btn" onclick="event.stopPropagation(); buyNow(${product.id})">Buy Now</button>
         </div>

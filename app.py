@@ -109,10 +109,17 @@ RAZORPAY_ENABLED = bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
 
 # Cloudinary — free image CDN for permanent product photo storage on Vercel.
 # Set CLOUDINARY_CLOUD_NAME and CLOUDINARY_UPLOAD_PRESET in your environment.
-# Without these, the admin panel falls back to storing base64 in the database
-# (works locally but hits Vercel's response-size limits for large images).
-CLOUDINARY_CLOUD_NAME = os.environ.get("CLOUDINARY_CLOUD_NAME", "")
-CLOUDINARY_UPLOAD_PRESET = os.environ.get("CLOUDINARY_UPLOAD_PRESET", "jeevani_products")
+CLOUDINARY_CLOUD_NAME = (
+    os.environ.get("CLOUDINARY_CLOUD_NAME")
+    or os.environ.get("CLOUD_NAME")
+    or os.environ.get("CLOUDINARY_NAME")
+    or "fn7oslej"
+)
+CLOUDINARY_UPLOAD_PRESET = (
+    os.environ.get("CLOUDINARY_UPLOAD_PRESET")
+    or os.environ.get("UPLOAD_PRESET")
+    or "jeevani_products"
+)
 VALID_ORDER_STATUSES = {"placed", "shipped", "delivered", "cancelled"}
 
 # CHANGE: Payment-method-based pricing. COD carries a small handling

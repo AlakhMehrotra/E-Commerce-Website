@@ -1538,14 +1538,16 @@
         // ---------- CLOUDINARY CONFIG ----------
         // Loaded once from the server; controls whether images go to Cloudinary
         // (permanent URL) or are stored as base64 in the database (local fallback).
-        let _cloudinaryConfig = { cloudName: '', uploadPreset: 'jeevani_products', enabled: false };
+        let _cloudinaryConfig = { cloudName: 'fn7oslej', uploadPreset: 'jeevani_products', enabled: true };
 
         async function _loadCloudinaryConfig() {
             try {
                 const cfg = await apiFetch('/api/config/cloudinary');
-                _cloudinaryConfig = cfg;
+                if (cfg && cfg.cloudName) {
+                    _cloudinaryConfig = cfg;
+                }
             } catch (e) {
-                console.warn('[Cloudinary] Could not load config, using base64 fallback.', e);
+                console.warn('[Cloudinary] Could not load config from API, using default.', e);
             }
         }
 

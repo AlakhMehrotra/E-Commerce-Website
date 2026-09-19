@@ -21,12 +21,29 @@ import datetime
 import shutil
 from werkzeug.security import generate_password_hash
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    load_dotenv("a.env")
+except ImportError:
+    pass
+
 # ── Turso / libsql support ─────────────────────────────────────────────────
 # If TURSO_DATABASE_URL is set we connect to the cloud DB; otherwise we fall
 # back to plain sqlite3 so local development is unchanged.
-TURSO_URL   = os.environ.get("TURSO_DATABASE_URL", "")
-TURSO_TOKEN = os.environ.get("TURSO_AUTH_TOKEN", "")
-USE_TURSO   = bool(TURSO_URL and TURSO_TOKEN)
+TURSO_URL = (
+    os.environ.get("TURSO_DATABASE_URL")
+    or os.environ.get("TURSO_URL")
+    or os.environ.get("LIBSQL_URL")
+    or ""
+)
+TURSO_TOKEN = (
+    os.environ.get("TURSO_AUTH_TOKEN")
+    or os.environ.get("TURSO_TOKEN")
+    or os.environ.get("LIBSQL_AUTH_TOKEN")
+    or ""
+)
+USE_TURSO = bool(TURSO_URL and TURSO_TOKEN)
 
 if USE_TURSO:
     try:
@@ -120,6 +137,8 @@ class _TursoConnWrapper:
 
     # ── Public interface (mirrors sqlite3.Connection) ─────────────────────
     def execute(self, sql, params=()):
+        if isinstance(params, (list, set)):
+            params = tuple(params)
         return _TursoCursorWrapper(self._conn.execute(sql, params))
 
     def executescript(self, script):
@@ -152,7 +171,19 @@ class _TursoCursorWrapper:
     """Wraps a libsql cursor to expose sqlite3-compatible API."""
     def __init__(self, cursor):
         self._cursor = cursor
-        self.lastrowid = getattr(cursor, 'lastrowid', None)
+
+    @property
+    def lastrowid(self):
+        return getattr(self._cursor, 'lastrowid', None)
+
+    @property
+    def rowcount(self):
+        return getattr(self._cursor, 'rowcount', -1)
+
+    def execute(self, sql, params=()):
+        if isinstance(params, (list, set)):
+            params = tuple(params)
+        return _TursoCursorWrapper(self._cursor.execute(sql, params))
 
     def fetchone(self):
         row = self._cursor.fetchone()
@@ -209,9 +240,26 @@ class _TursoRowWrapper:
 
 
 def _connect_db():
-    if USE_TURSO:
-        raw = libsql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
-        return _TursoConnWrapper(raw)
+    url = (
+        os.environ.get("TURSO_DATABASE_URL")
+        or os.environ.get("TURSO_URL")
+        or os.environ.get("LIBSQL_URL")
+        or TURSO_URL
+    )
+    token = (
+        os.environ.get("TURSO_AUTH_TOKEN")
+        or os.environ.get("TURSO_TOKEN")
+        or os.environ.get("LIBSQL_AUTH_TOKEN")
+        or TURSO_TOKEN
+    )
+    if url and token:
+        try:
+            import libsql_experimental as libsql
+            raw = libsql.connect(url, auth_token=token)
+            return _TursoConnWrapper(raw)
+        except Exception as e:
+            print(f"[DB] Error connecting to Turso cloud database: {e}. Falling back to local SQLite.")
+
     # Local / non-Vercel: plain sqlite3
     global DB_PATH
     DB_PATH = _get_db_path()
