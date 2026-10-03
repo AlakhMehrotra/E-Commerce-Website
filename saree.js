@@ -66,6 +66,15 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
+function parseDate(dateStr) {
+    if (!dateStr) return new Date();
+    if (typeof dateStr === 'string' && dateStr.includes(' ') && !dateStr.includes('T')) {
+        dateStr = dateStr.replace(' ', 'T') + 'Z';
+    }
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? new Date() : d;
+}
+
 // ─── API helper ─────────────────────────────────────────────────────────
 async function apiFetch(url, options = {}) {
     const res = await fetch(API_BASE + url, {
@@ -199,6 +208,10 @@ async function checkAdminSession() {
     } catch (err) {
         isAdminLoggedIn = false;
     }
+    const navAdmin = document.getElementById('navAdminLi');
+    if (navAdmin) navAdmin.style.display = isAdminLoggedIn ? 'list-item' : 'none';
+    const mobAdmin = document.getElementById('mobileNavAdminLi');
+    if (mobAdmin) mobAdmin.style.display = isAdminLoggedIn ? 'list-item' : 'none';
 }
 
 // Page Navigation
@@ -218,38 +231,98 @@ function setupEventListeners() {
             const collection = this.getAttribute('data-collection');
             if (collection) {
                 navigateToPage('collections');
-                document.getElementById('categoryFilter').value = collection;
+                const catEl = document.getElementById('categoryFilter');
+                if (catEl) catEl.value = collection;
                 filterProducts();
             }
         });
     });
 
     // Cart button
-    document.getElementById('cartBtn').addEventListener('click', openCart);
-    document.getElementById('closeCart').addEventListener('click', closeCart);
+    document.getElementById('cartBtn')?.addEventListener('click', openCart);
+    document.getElementById('closeCart')?.addEventListener('click', closeCart);
 
     // Filters
     document.getElementById('categoryFilter')?.addEventListener('change', filterProducts);
     document.getElementById('priceFilter')?.addEventListener('change', filterProducts);
     document.getElementById('sortFilter')?.addEventListener('change', filterProducts);
 
+    // Search bar functionality
+    const searchBtn = document.getElementById('searchBtn');
+    const headerSearchBar = document.getElementById('headerSearchBar');
+    const headerSearchInput = document.getElementById('headerSearchInput');
+    const headerSearchClose = document.getElementById('headerSearchClose');
+    const collectionSearchInput = document.getElementById('searchInput');
+
+    let searchDebounceTimer = null;
+    function triggerDebouncedSearch(val) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+            if (currentPage !== 'collections') {
+                navigateToPage('collections');
+            }
+            if (collectionSearchInput && collectionSearchInput.value !== val) {
+                collectionSearchInput.value = val;
+            }
+            filterProducts();
+        }, 300);
+    }
+
+    if (searchBtn && headerSearchBar) {
+        searchBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isHidden = headerSearchBar.style.display === 'none';
+            headerSearchBar.style.display = isHidden ? 'flex' : 'none';
+            if (isHidden && headerSearchInput) {
+                setTimeout(() => headerSearchInput.focus(), 50);
+            }
+        });
+    }
+
+    headerSearchClose?.addEventListener('click', () => {
+        if (headerSearchBar) headerSearchBar.style.display = 'none';
+    });
+
+    headerSearchInput?.addEventListener('input', (e) => {
+        triggerDebouncedSearch(e.target.value.trim());
+    });
+
+    headerSearchInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            triggerDebouncedSearch(e.target.value.trim());
+        }
+    });
+
+    collectionSearchInput?.addEventListener('input', (e) => {
+        if (headerSearchInput && headerSearchInput.value !== e.target.value) {
+            headerSearchInput.value = e.target.value;
+        }
+        triggerDebouncedSearch(e.target.value.trim());
+    });
+
+    // Payment method radio change updates order summary live
+    document.querySelectorAll('input[name="payment"]').forEach(radio => {
+        radio.addEventListener('change', renderOrderSummary);
+    });
+
     // Click outside cart modal to close
-    document.getElementById('cartModal').addEventListener('click', function (e) {
+    document.getElementById('cartModal')?.addEventListener('click', function (e) {
         if (e.target === this) closeCart();
     });
 
     // Click outside product modal to close
-    document.getElementById('productModal').addEventListener('click', function (e) {
+    document.getElementById('productModal')?.addEventListener('click', function (e) {
         if (e.target === this) closeProductModal();
     });
 
     // Click outside checkout modal to close
-    document.getElementById('checkoutModal').addEventListener('click', function (e) {
+    document.getElementById('checkoutModal')?.addEventListener('click', function (e) {
         if (e.target === this) closeCheckout();
     });
 
     // CHANGE (Phase 6): mobile nav hamburger — .nav-links has no visible
-    // fallback below 768px, so this drawer is the only way to reach
+    // fallback below 768px (see saree.css), so this drawer is the only way to reach
     // Home/Collections/About/Contact/FAQs on a phone.
     const hamburger = document.getElementById('navHamburger');
     const overlay = document.getElementById('mobileNavOverlay');

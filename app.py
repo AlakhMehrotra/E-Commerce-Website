@@ -799,6 +799,14 @@ def list_products():
         sql += " AND price BETWEEN 30000 AND 50000"
     elif price_range == "above50":
         sql += " AND price > 50000"
+    elif price_range == "under2500":
+        sql += " AND price < 2500"
+    elif price_range == "2500to5000":
+        sql += " AND price BETWEEN 2500 AND 5000"
+    elif price_range == "5000to15000":
+        sql += " AND price BETWEEN 5000 AND 15000"
+    elif price_range == "above15000":
+        sql += " AND price >= 15000"
 
     if query:
         sql += " AND (name LIKE ? OR description LIKE ?)"

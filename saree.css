@@ -1636,3 +1636,112 @@ input, textarea, select {
   opacity: 0.8;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   ANIMATIONS & UI ENHANCEMENTS
+   ══════════════════════════════════════════════════════════════════ */
+@keyframes slideIn {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.toast-notification {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  background: var(--maroon);
+  color: white;
+  padding: 0.9rem 1.6rem;
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-lg);
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 1rem;
+  z-index: 9999;
+  animation: slideIn 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .toast-notification {
+    left: 20px;
+    right: 20px;
+    bottom: 80px; /* Above mobile WhatsApp button */
+    text-align: center;
+    justify-content: center;
+  }
+}
+
+/* Header Search Bar */
+.header-search-bar {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 1.5rem;
+  background: var(--surface-01);
+  border: 1px solid var(--border-mid);
+  box-shadow: var(--shadow-lg);
+  border-radius: var(--r-pill);
+  display: flex;
+  align-items: center;
+  padding: 6px 14px;
+  gap: 8px;
+  z-index: 1001;
+}
+
+.header-search-bar input {
+  border: none;
+  outline: none;
+  font-size: 0.95rem;
+  font-family: var(--font-body);
+  width: 250px;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.header-search-bar button {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.header-search-bar button:hover {
+  color: var(--text-primary);
+}
+
+/* Collections Page Search Input */
+.filter-search-input {
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--border-mid);
+  border-radius: var(--r-sm);
+  background: var(--surface-01);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  outline: none;
+  transition: var(--t-fast);
+}
+
+.filter-search-input:focus {
+  border-color: var(--maroon);
+  box-shadow: 0 0 0 3px rgba(123,31,58,0.12);
+}
+
+/* Admin link in nav */
+.nav-admin-link {
+  color: var(--gold) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.5px;
+}
+
+

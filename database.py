@@ -136,6 +136,10 @@ class _TursoConnWrapper:
         return result
 
     # ── Public interface (mirrors sqlite3.Connection) ─────────────────────
+    def cursor(self):
+        raw_cur = self._conn.cursor() if hasattr(self._conn, "cursor") else self._conn
+        return _TursoCursorWrapper(raw_cur)
+
     def execute(self, sql, params=()):
         if isinstance(params, (list, set)):
             params = tuple(params)

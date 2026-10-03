@@ -58,10 +58,14 @@
                 <li><a href="#" data-page="collections">Collections</a></li>
                 <li><a href="#" data-page="about">About Us</a></li>
                 <li><a href="#" data-page="contact">Contact</a></li>
-                <!-- CHANGE: Admin link — hidden by default, shown only when admin is logged in (controlled via JS) -->
+                <li id="navAdminLi" style="display:none;"><a href="admin.html" target="_blank" style="color:var(--gold);font-weight:600;">Admin Panel ⚙️</a></li>
             </ul>
             <div class="nav-icons">
-                <button class="icon-btn" id="searchBtn">🔍</button>
+                <button class="icon-btn" id="searchBtn" title="Search sarees" aria-label="Search sarees">🔍</button>
+                <div class="header-search-bar" id="headerSearchBar" style="display:none;">
+                    <input type="text" id="headerSearchInput" placeholder="Search sarees by name, fabric, style..." autocomplete="off">
+                    <button type="button" id="headerSearchClose" aria-label="Close search">×</button>
+                </div>
                 <button class="account-pill" id="accountBtn">
                     <span class="acct-icon">👤</span>
                     <span class="acct-name" id="acctLabel">Sign In</span>
@@ -95,6 +99,7 @@
                 <li><a href="#" data-page="about">About Us</a></li>
                 <li><a href="#" data-page="contact">Contact</a></li>
                 <li><a href="#" data-page="faq">FAQs</a></li>
+                <li id="mobileNavAdminLi" style="display:none;"><a href="admin.html" target="_blank" style="color:var(--gold);font-weight:600;">Admin Panel ⚙️</a></li>
             </ul>
         </div>
     </div>
@@ -108,7 +113,7 @@
     <div id="homePage" class="page active">
         <!-- Hero Section -->
         <section class="hero">
-            <img class="hero-photo" src="https://images.unsplash.com/photo-1610189000544-1f0885c4bbeb?q=80&w=2071&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Kashi Vishwanath Temple, Varanasi">
+            <img class="hero-photo" src="https://images.unsplash.com/photo-1610189000544-1f0885c4bbeb?q=80&w=2071&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Kashi Vishwanath Temple, Varanasi" onerror="this.onerror=null; this.src='portrait.jpg';">
             <div class="hero-content">
                 <div class="hero-text">
                     <p class="hero-eyebrow">Woven on the Ghats of Kashi</p>
@@ -284,6 +289,11 @@
                 <h3>Filter & Sort</h3>
                 <div class="filter-group">
                     <div class="filter-item">
+                        <label>Search Sarees</label>
+                        <input type="text" id="searchInput" placeholder="Search by name, fabric..." class="filter-search-input">
+                    </div>
+
+                    <div class="filter-item">
                         <label>Category</label>
                         <select id="categoryFilter">
                             <option value="all">All Categories</option>
@@ -298,9 +308,11 @@
                         <label>Price Range</label>
                         <select id="priceFilter">
                             <option value="all">All Prices</option>
+                            <option value="under2500">Under ₹2,500</option>
+                            <option value="2500to5000">₹2,500 - ₹5,000</option>
+                            <option value="5000to15000">₹5,000 - ₹15,000</option>
+                            <option value="above15000">Above ₹15,000</option>
                             <option value="under30">Under ₹30,000</option>
-                            <option value="30to50">₹30,000 - ₹50,000</option>
-                            <option value="above50">Above ₹50,000</option>
                         </select>
                     </div>
 
@@ -582,8 +594,13 @@
                         Add To Cart
                     </button>
 
+                    <button id="modalViewDetails" class="checkout-btn"
+                        style="background:var(--ganga-blue);color:white;margin-top:0.6rem;">
+                        View Full Details & Photos →
+                    </button>
+
                     <button id="modalWishlistBtn" class="add-to-cart"
-                        style="background:none;border:1px solid var(--maroon);color:var(--maroon);margin-top:0.8rem;">
+                        style="background:none;border:1px solid var(--maroon);color:var(--maroon);margin-top:0.6rem;">
                         ♡ Add to Wishlist
                     </button>
 
