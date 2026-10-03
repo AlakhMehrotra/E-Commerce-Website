@@ -1896,7 +1896,7 @@
         async function loadOrders() {
             const listEl = document.getElementById('orderList');
             const statsEl = document.getElementById('orderStats');
-            listEl.innerHTML = `<div class="empty-state">Loading orders…</div>`;
+              listEl.innerHTML = `<div class="empty-state">Loading orders…</div>`;
             try {
                 const orders = await apiFetch('/api/admin/orders');
 
