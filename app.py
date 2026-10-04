@@ -215,8 +215,25 @@ def serve_saree():
     return render_seo_shell("/")
 
 
+# Security: admin panel is hidden behind a secret URL. Visiting /admin.html
+# without an active admin session returns a generic 404 so attackers can't
+# even tell an admin panel exists. The real entry point is /ssonuadmin —
+# change this to any path only you know.
+ADMIN_SECRET_PATH = os.environ.get("ADMIN_SECRET_PATH", "ssonuadmin")
+
+
 @app.route("/admin.html")
 def serve_admin():
+    # If already authenticated, serve the panel
+    if session.get("is_admin"):
+        return send_from_directory(BASE_DIR, "admin.html")
+    # Otherwise pretend this page doesn't exist
+    return render_seo_shell("/admin.html", title="Page not found", robots="noindex", status=404)
+
+
+@app.route("/" + ADMIN_SECRET_PATH)
+def serve_admin_secret():
+    """Secret admin entry point — only the store owner knows this URL."""
     return send_from_directory(BASE_DIR, "admin.html")
 
 
@@ -264,7 +281,6 @@ def robots_txt():
     body = (
         "User-agent: *\n"
         "Allow: /\n"
-        "Disallow: /admin.html\n"
         "Disallow: /api/\n"
         f"Sitemap: {SITE_URL}/sitemap.xml\n"
     )

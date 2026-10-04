@@ -208,10 +208,7 @@ async function checkAdminSession() {
     } catch (err) {
         isAdminLoggedIn = false;
     }
-    const navAdmin = document.getElementById('navAdminLi');
-    if (navAdmin) navAdmin.style.display = isAdminLoggedIn ? 'list-item' : 'none';
-    const mobAdmin = document.getElementById('mobileNavAdminLi');
-    if (mobAdmin) mobAdmin.style.display = isAdminLoggedIn ? 'list-item' : 'none';
+    // Admin panel is now fully separate (admin.html) — no nav links in storefront.
 }
 
 // Page Navigation
@@ -687,8 +684,11 @@ async function filterProducts() {
     const category = document.getElementById('categoryFilter').value;
     const priceRange = document.getElementById('priceFilter').value;
     const sortBy = document.getElementById('sortFilter').value;
+    const searchInput = document.getElementById('searchInput');
+    const searchQuery = searchInput ? searchInput.value.trim() : '';
 
     const params = new URLSearchParams({ category, price: priceRange, sort: sortBy });
+    if (searchQuery) params.set('q', searchQuery);
 
     try {
         const filtered = await apiFetch(`/api/products?${params.toString()}`);
@@ -1003,6 +1003,15 @@ function showProduct(id) {
     document.getElementById('modalProductDesc').innerText = product.description || 'Pure Banarasi Silk • Handwoven';
     document.getElementById('modalProductPrice').innerText = '₹' + product.price.toLocaleString('en-IN');
     document.getElementById('modalAddCart').onclick = () => addToCart(product.id);
+
+    // "View Full Details & Photos" button — opens the full product detail page
+    const viewDetailsBtn = document.getElementById('modalViewDetails');
+    if (viewDetailsBtn) {
+        viewDetailsBtn.onclick = () => {
+            closeProductModal();
+            openProduct(product.id);
+        };
+    }
 
     // Phase 2: wishlist toggle in the quick-view modal
     const wishBtn = document.getElementById('modalWishlistBtn');
@@ -3279,10 +3288,4 @@ function downloadBlob(blob, filename) {
 // END: Product Management System
 // ═══════════════════════════════════════════════════════════════════════
 
-document.addEventListener("keydown", function(event) {
-    // Press F9 to open Admin Panel
-    if (event.key === "F9") {
-        window.location.href = "admin.html";
-    }
-});
-
+// Admin panel access is now only through admin.html (no keyboard shortcut in storefront).
