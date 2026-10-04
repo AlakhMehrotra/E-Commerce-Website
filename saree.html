@@ -51,7 +51,8 @@
     <nav class="navbar">
         <div class="nav-container">
             <a href="#" class="logo" data-page="home" aria-label="Ssonu's Home">
-                <img src="logo-transparent.png?v=3" alt="Ssonu's" class="logo-img" onerror="this.onerror=null; this.src='/logo-transparent.png';">
+                <img src="logo-transparent.png?v=3" alt="Ssonu's" class="logo-img"
+                    onerror="this.onerror=null; this.src='/logo-transparent.png';">
             </a>
             <ul class="nav-links">
                 <li><a href="#" data-page="home">Home</a></li>
@@ -62,7 +63,8 @@
             <div class="nav-icons">
                 <button class="icon-btn" id="searchBtn" title="Search sarees" aria-label="Search sarees">🔍</button>
                 <div class="header-search-bar" id="headerSearchBar" style="display:none;">
-                    <input type="text" id="headerSearchInput" placeholder="Search sarees by name, fabric, style..." autocomplete="off">
+                    <input type="text" id="headerSearchInput" placeholder="Search sarees by name, fabric, style..."
+                        autocomplete="off">
                     <button type="button" id="headerSearchClose" aria-label="Close search">×</button>
                 </div>
                 <button class="account-pill" id="accountBtn">
@@ -111,7 +113,9 @@
     <div id="homePage" class="page active">
         <!-- Hero Section -->
         <section class="hero">
-            <img class="hero-photo" src="https://images.unsplash.com/photo-1610189000544-1f0885c4bbeb?q=80&w=2071&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D" alt="Kashi Vishwanath Temple, Varanasi" onerror="this.onerror=null; this.src='portrait.jpg';">
+            <img class="hero-photo"
+                src="https://images.unsplash.com/photo-1610189000544-1f0885c4bbeb?q=80&w=2071&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D"
+                alt="Kashi Vishwanath Temple, Varanasi" onerror="this.onerror=null; this.src='portrait.jpg';">
             <div class="hero-content">
                 <div class="hero-text">
                     <p class="hero-eyebrow">Woven on the Ghats of Kashi</p>
@@ -288,7 +292,8 @@
                 <div class="filter-group">
                     <div class="filter-item">
                         <label>Search Sarees</label>
-                        <input type="text" id="searchInput" placeholder="Search by name, fabric..." class="filter-search-input">
+                        <input type="text" id="searchInput" placeholder="Search by name, fabric..."
+                            class="filter-search-input">
                     </div>
 
                     <div class="filter-item">
@@ -832,7 +837,8 @@
                     <textarea id="returnRequestReason" placeholder="Tell us what went wrong..." rows="3"></textarea>
                 </div>
                 <div class="checkout-error" id="returnRequestError"></div>
-                <button class="checkout-btn" id="returnRequestSubmitBtn" onclick="submitReturnRequest()">Submit Request</button>
+                <button class="checkout-btn" id="returnRequestSubmitBtn" onclick="submitReturnRequest()">Submit
+                    Request</button>
             </div>
         </div>
     </div>
@@ -874,11 +880,11 @@
 
                 <h3>Payment Method</h3>
 
-                <div class="payment-option-row" onclick="document.getElementById('payMethodCod').checked = true; renderOrderSummary();">
+                <div class="payment-option-row"
+                    onclick="document.getElementById('payMethodCod').checked = true; renderOrderSummary();">
                     <label style="cursor:pointer; display:flex; align-items:center; width:100%;">
                         <input type="radio" id="payMethodCod" name="payment" value="cod" checked
-                            onchange="renderOrderSummary()"
-                            style="width:auto; margin-right:0.6rem;">
+                            onchange="renderOrderSummary()" style="width:auto; margin-right:0.6rem;">
                         <div>
                             <strong>Cash on Delivery (COD)</strong>
                             <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">Pay cash to
@@ -887,10 +893,10 @@
                     </label>
                 </div>
 
-                <div class="payment-option-row" onclick="document.getElementById('payMethodUpi').checked = true; renderOrderSummary();">
+                <div class="payment-option-row"
+                    onclick="document.getElementById('payMethodUpi').checked = true; renderOrderSummary();">
                     <label style="cursor:pointer; display:flex; align-items:center; width:100%;">
-                        <input type="radio" id="payMethodUpi" name="payment" value="upi"
-                            onchange="renderOrderSummary()"
+                        <input type="radio" id="payMethodUpi" name="payment" value="upi" onchange="renderOrderSummary()"
                             style="width:auto; margin-right:0.6rem;">
                         <div>
                             <strong>UPI Instant Payment</strong>
@@ -900,11 +906,11 @@
                     </label>
                 </div>
 
-                <div class="payment-option-row" onclick="document.getElementById('payMethodCard').checked = true; renderOrderSummary();">
+                <div class="payment-option-row"
+                    onclick="document.getElementById('payMethodCard').checked = true; renderOrderSummary();">
                     <label style="cursor:pointer; display:flex; align-items:center; width:100%;">
                         <input type="radio" id="payMethodCard" name="payment" value="card"
-                            onchange="renderOrderSummary()"
-                            style="width:auto; margin-right:0.6rem;">
+                            onchange="renderOrderSummary()" style="width:auto; margin-right:0.6rem;">
                         <div>
                             <strong>Debit / Credit Card / NetBanking</strong>
                             <div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.2rem;">Visa, MasterCard,
@@ -1042,12 +1048,15 @@
 
                 <!-- Multiple photos upload field -->
                 <div class="auth-field">
-                    <label>Product Photos <span id="formPhotosCount" style="font-weight:normal;color:var(--text-muted);">(0/10 photos)</span></label>
-                    <div class="image-upload-area" id="imageUploadArea" style="cursor:pointer;" onclick="document.getElementById('formImage').click()">
+                    <label>Product Photos <span id="formPhotosCount"
+                            style="font-weight:normal;color:var(--text-muted);">(0/10 photos)</span></label>
+                    <div class="image-upload-area" id="imageUploadArea" style="cursor:pointer;"
+                        onclick="document.getElementById('formImage').click()">
                         <div id="imagePreview" class="image-preview-placeholder">
                             <span style="font-size:2.5rem;">📸</span>
                             <p>Click to choose photos or drag & drop</p>
-                            <p style="font-size:0.85rem; color: var(--stone-soft);">Select multiple photos (JPG, PNG, WEBP — max 5 MB each, up to 10)</p>
+                            <p style="font-size:0.85rem; color: var(--stone-soft);">Select multiple photos (JPG, PNG,
+                                WEBP — max 5 MB each, up to 10)</p>
                         </div>
                         <input type="file" id="formImage" accept="image/*" multiple style="display:none;"
                             onchange="previewUploadedImage(event)">
@@ -1253,8 +1262,7 @@
                 <a href="#" data-page="collections">Collections</a>
                 <a href="#" data-page="about">About Us</a>
                 <a href="#" data-page="contact">Contact</a>
-                <a href="admin.html" id="footerAdminLink" style="margin-top:10px;opacity:0.5;font-size:0.85em;">⚙ Admin
-                    Panel</a>
+
             </div>
 
             <div class="footer-section">
